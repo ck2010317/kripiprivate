@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate minimum amounts
-    const KRIPICARD_MIN_FUND = 10 // KripiCard minimum funding amount
+    const KRIPICARD_MIN_FUND = 10 // KripiCard minimum funding amount (only for actual funding)
     
     if (!amountUsd || amountUsd < 1) {
       return NextResponse.json(
@@ -42,44 +42,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For fund/topup operations, validate that topup amount meets KripiCard minimum
-    if ((cardType === "topup" || cardType === "fund") && topupAmount) {
-      if (topupAmount < KRIPICARD_MIN_FUND) {
-        console.error("[Payments] ❌ Topup amount below KripiCard minimum:", {
-          topupAmount,
-          minimum: KRIPICARD_MIN_FUND,
-          cardType,
-        })
-        return NextResponse.json(
-          { 
-            error: `Fund amount must be at least $${KRIPICARD_MIN_FUND}`,
-            details: `The topup amount ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
-            topupAmount,
-            minimum: KRIPICARD_MIN_FUND,
-          },
-          { status: 400 }
-        )
-      }
-    }
-
-    // For card issuance, validate that the topup/initial amount meets minimum
-    if (cardType === "issue" && topupAmount) {
-      if (topupAmount < KRIPICARD_MIN_FUND) {
-        console.error("[Payments] ❌ Card issuance amount below KripiCard minimum:", {
-          topupAmount,
-          minimum: KRIPICARD_MIN_FUND,
-        })
-        return NextResponse.json(
-          { 
-            error: `Card balance must be at least $${KRIPICARD_MIN_FUND}`,
-            details: `The initial balance ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
-            topupAmount,
-            minimum: KRIPICARD_MIN_FUND,
-          },
-          { status: 400 }
-        )
-      }
-    }
+    // NOTE: We accept payments >= $1, but KripiCard Fund API requires >= $10
+    // The $10 check happens later when actually funding the card
+    // Payment verification should work with any amount >= $1
 
     if (amountUsd > 10000) {
       return NextResponse.json(
