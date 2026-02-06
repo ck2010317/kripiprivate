@@ -65,6 +65,25 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
     }
   }, [])
 
+  const syncCardBalance = useCallback(async (cardId: string) => {
+    try {
+      setActionLoading(cardId)
+      const response = await fetch(`/api/cards/${cardId}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        // Update the card with synced balance from KripiCard
+        setCards(cards.map(card => 
+          card.id === cardId ? { ...card, balance: data.card.balance } : card
+        ))
+      }
+    } catch (error) {
+      console.error("Failed to sync card balance:", error)
+    } finally {
+      setActionLoading(null)
+    }
+  }, [cards])
+
   useEffect(() => {
     fetchCards()
   }, [fetchCards])
@@ -258,11 +277,23 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
                 </div>
 
                 {/* Card Actions */}
-                <div className="p-4 border-t border-border/50 flex gap-2">
+                <div className="p-4 border-t border-border/50 grid grid-cols-3 gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => syncCardBalance(card.id)}
+                    disabled={actionLoading === card.id}
+                    title="Sync balance from KripiCard"
+                  >
+                    {actionLoading === card.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
                     onClick={() => handleCardAction(card.id, card.status === "FROZEN" ? "unfreeze" : "freeze")}
                     disabled={actionLoading === card.id}
                   >
@@ -283,7 +314,6 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
                     onClick={() => setSelectedCard(card)}
                   >
                     <DollarSign className="w-4 h-4 mr-1" />
