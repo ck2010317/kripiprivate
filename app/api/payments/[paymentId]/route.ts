@@ -147,6 +147,12 @@ export async function POST(
       // For card issuance, use the amountUsd minus the $5 fee for topup
       const topupAmount = payment.topupAmount || (payment.amountUsd - 5) || 10
       
+      console.log(`[Card Creation] Starting card creation process`)
+      console.log(`[Card Creation] Payment ID: ${payment.id}`)
+      console.log(`[Card Creation] Payment topupAmount: ${payment.topupAmount}`)
+      console.log(`[Card Creation] Payment amountUsd: ${payment.amountUsd}`)
+      console.log(`[Card Creation] Calculated topupAmount: ${topupAmount}`)
+      
       if (topupAmount < 10) {
         await prisma.payment.update({
           where: { id: payment.id },
@@ -165,12 +171,14 @@ export async function POST(
       // Issue new card
       try {
         const cardAmount = topupAmount + 5 // topup + $5 fee
-        console.log(`[Card Creation] Payment ID: ${payment.id}`)
-        console.log(`[Card Creation] Payment topupAmount: ${payment.topupAmount}`)
-        console.log(`[Card Creation] Payment amountUsd: ${payment.amountUsd}`)
-        console.log(`[Card Creation] Calculated topupAmount: ${topupAmount}`)
         console.log(`[Card Creation] Card amount to send: ${cardAmount}`)
         console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
+        console.log(`[Card Creation] About to call createKripiCard with:`, {
+          amount: cardAmount,
+          name_on_card: payment.nameOnCard || user.name,
+          email: user.email,
+          bankBin: "49387520",
+        })
         
         const kripiResponse = await createKripiCard({
           amount: cardAmount,
@@ -221,26 +229,35 @@ export async function POST(
           },
         })
       } catch (cardError) {
-        console.error("[Card Creation] Error creating card:", cardError)
+        console.error("[Card Creation] ❌ Exception in card creation:", cardError)
+        if (cardError instanceof Error) {
+          console.error("[Card Creation] Error message:", cardError.message)
+          console.error("[Card Creation] Error stack:", cardError.stack)
+        }
+        console.error("[Card Creation] Full error object:", JSON.stringify(cardError, null, 2))
+        
         const errorMessage = cardError instanceof Error ? cardError.message : JSON.stringify(cardError)
-        const errorStack = cardError instanceof Error ? cardError.stack : ""
-        console.error("[Card Creation] Error details:", errorMessage)
-        console.error("[Card Creation] Error stack:", errorStack)
-        console.error("[Card Creation] Full error object:", cardError)
         
         await prisma.payment.update({
           where: { id: payment.id },
           data: { status: "FAILED" },
         })
-        return NextResponse.json(
-          { 
-            error: "Failed to create card",
-            details: errorMessage,
-            stack: process.env.NODE_ENV === "development" ? errorStack : undefined,
-            fullError: process.env.NODE_ENV === "development" ? JSON.stringify(cardError) : undefined,
-          },
-          { status: 500 }
-        )
+        
+        const errorResponse = {
+          error: "Failed to create card",
+          details: errorMessage,
+          timestamp: new Date().toISOString(),
+        }
+        
+        if (process.env.NODE_ENV === "development") {
+          Object.assign(errorResponse, {
+            stack: cardError instanceof Error ? cardError.stack : undefined,
+            fullError: JSON.stringify(cardError),
+          })
+        }
+        
+        console.error("[Card Creation] Returning error response:", errorResponse)
+        return NextResponse.json(errorResponse, { status: 500 })
       }
     } else if (payment.cardType === "topup" && payment.targetCardId) {
       // Fund existing card with the actual topup amount (not including fee)

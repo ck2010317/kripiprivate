@@ -70,9 +70,15 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
       email: request.email,
     }
     
+    console.log("[KripiCard] Payload keys:", Object.keys(payload))
+    console.log("[KripiCard] API_KEY present:", !!API_KEY)
+    console.log("[KripiCard] Amount value:", request.amount, "Type:", typeof request.amount)
     console.log("[KripiCard] Sending payload:", JSON.stringify(payload, null, 2))
     
-    const response = await fetch(`${KRIPICARD_BASE_URL}/premium/Create_card`, {
+    const url = `${KRIPICARD_BASE_URL}/premium/Create_card`
+    console.log("[KripiCard] Calling URL:", url)
+    
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -80,9 +86,14 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
       body: JSON.stringify(payload),
     })
 
+    console.log("[KripiCard] Response received, status:", response.status)
+    
     const contentType = response.headers.get("content-type")
+    console.log("[KripiCard] Response content-type:", contentType)
+    
     if (!contentType || !contentType.includes("application/json")) {
       const text = await response.text()
+      console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
       throw new Error(`API returned non-JSON: ${text.substring(0, 100)}`)
     }
 
@@ -93,6 +104,7 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     if (!response.ok || !data.success) {
       const errorMsg = data.message || `HTTP ${response.status}: API returned success=false`
       console.error("[KripiCard] ❌ API Error:", errorMsg)
+      console.error("[KripiCard] Full response:", JSON.stringify(data, null, 2))
       throw new Error(`KripiCard API Error (${response.status}): ${errorMsg}`)
     }
 
@@ -100,8 +112,11 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     return data
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error"
-    console.error("[KripiCard] ❌ Error:", errorMsg)
-    console.error("[KripiCard] ❌ Full error:", error)
+    console.error("[KripiCard] ❌ Exception caught:", errorMsg)
+    if (error instanceof Error) {
+      console.error("[KripiCard] Stack:", error.stack)
+    }
+    console.error("[KripiCard] Full error object:", error)
     throw error
   }
 }
