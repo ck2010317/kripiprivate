@@ -216,7 +216,10 @@ export async function POST(
           },
         })
       } catch (cardError) {
-        console.error("[Card Creation] Error:", cardError)
+        console.error("[Card Creation] Error creating card:", cardError)
+        const errorMessage = cardError instanceof Error ? cardError.message : JSON.stringify(cardError)
+        console.error("[Card Creation] Error details:", errorMessage)
+        
         await prisma.payment.update({
           where: { id: payment.id },
           data: { status: "FAILED" },
@@ -224,7 +227,7 @@ export async function POST(
         return NextResponse.json(
           { 
             error: "Failed to create card",
-            details: cardError instanceof Error ? cardError.message : "Unknown error",
+            details: errorMessage,
           },
           { status: 500 }
         )

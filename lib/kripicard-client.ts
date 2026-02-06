@@ -62,18 +62,22 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
   
   // Actually call the API
   try {
+    const payload = {
+      api_key: API_KEY,
+      amount: request.amount,
+      bankBin: request.bankBin || "49387520",
+      name_on_card: request.name_on_card.toUpperCase(),
+      email: request.email,
+    }
+    
+    console.log("[KripiCard] Sending payload:", JSON.stringify(payload, null, 2))
+    
     const response = await fetch(`${KRIPICARD_BASE_URL}/premium/Create_card`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        api_key: API_KEY,
-        amount: request.amount,
-        bankBin: request.bankBin || "49387520",
-        name_on_card: request.name_on_card.toUpperCase(),
-        email: request.email,
-      }),
+      body: JSON.stringify(payload),
     })
 
     const contentType = response.headers.get("content-type")
@@ -83,6 +87,8 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     }
 
     const data = await response.json()
+    console.log("[KripiCard] Response status:", response.status)
+    console.log("[KripiCard] Response data:", JSON.stringify(data, null, 2))
 
     if (!response.ok || !data.success) {
       throw new Error(data.message || "Failed to create card")
