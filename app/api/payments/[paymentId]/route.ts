@@ -223,7 +223,10 @@ export async function POST(
       } catch (cardError) {
         console.error("[Card Creation] Error creating card:", cardError)
         const errorMessage = cardError instanceof Error ? cardError.message : JSON.stringify(cardError)
+        const errorStack = cardError instanceof Error ? cardError.stack : ""
         console.error("[Card Creation] Error details:", errorMessage)
+        console.error("[Card Creation] Error stack:", errorStack)
+        console.error("[Card Creation] Full error object:", cardError)
         
         await prisma.payment.update({
           where: { id: payment.id },
@@ -233,6 +236,8 @@ export async function POST(
           { 
             error: "Failed to create card",
             details: errorMessage,
+            stack: process.env.NODE_ENV === "development" ? errorStack : undefined,
+            fullError: process.env.NODE_ENV === "development" ? JSON.stringify(cardError) : undefined,
           },
           { status: 500 }
         )

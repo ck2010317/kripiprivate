@@ -91,7 +91,9 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     console.log("[KripiCard] Response data:", JSON.stringify(data, null, 2))
 
     if (!response.ok || !data.success) {
-      throw new Error(data.message || "Failed to create card")
+      const errorMsg = data.message || `HTTP ${response.status}: API returned success=false`
+      console.error("[KripiCard] ❌ API Error:", errorMsg)
+      throw new Error(`KripiCard API Error (${response.status}): ${errorMsg}`)
     }
 
     console.log("[KripiCard] ✅ Card created:", data.card_id)
@@ -99,6 +101,7 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error"
     console.error("[KripiCard] ❌ Error:", errorMsg)
+    console.error("[KripiCard] ❌ Full error:", error)
     throw error
   }
 }
