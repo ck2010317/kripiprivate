@@ -16,7 +16,8 @@ import {
   Play,
   DollarSign,
   LogOut,
-  ArrowLeft
+  ArrowLeft,
+  Wallet
 } from "lucide-react"
 import { useAuth } from "@/app/context/auth-context"
 
@@ -323,12 +324,16 @@ function FundCardModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const FIXED_FEE = 1.0
-  const SERVICE_FEE_PERCENT = 0.02
+  // Fee constants - IMPORTANT: These match the card issuance fees
+  const CARD_ISSUANCE_FEE = 4.0 // Fixed card issuance fee (when creating new card)
+  const SERVICE_FEE_PERCENT = 0.02 // 2%
+  const SERVICE_FEE_FLAT = 1.0 // $1 flat
 
+  // Calculate for top-up (only service fee, no card issuance fee)
   const topupAmount = parseFloat(amount) || 0
-  const serviceFee = topupAmount > 0 ? topupAmount * SERVICE_FEE_PERCENT + FIXED_FEE : 0
-  const totalAmount = topupAmount + serviceFee
+  const serviceFee = topupAmount > 0 ? topupAmount * SERVICE_FEE_PERCENT + SERVICE_FEE_FLAT : 0
+  const totalToCharge = topupAmount + serviceFee
+  const finalBalance = card.balance + topupAmount // Balance after topup (before fees)
 
   const handleFund = async () => {
     const fundAmount = parseFloat(amount)
@@ -350,6 +355,7 @@ function FundCardModal({
       const data = await response.json()
 
       if (data.success) {
+        // TODO: This should redirect to payment verification after Solana payment
         onSuccess()
       } else {
         setError(data.error || "Failed to fund card")
@@ -365,7 +371,7 @@ function FundCardModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
-      <Card className="relative z-10 w-full max-w-md bg-card border-border/50 overflow-hidden">
+      <Card className="relative z-10 w-full max-w-lg bg-card border-border/50 overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-border/50">
           <h3 className="text-2xl font-bold">Fund Card</h3>
@@ -404,25 +410,40 @@ function FundCardModal({
                 MAX
               </button>
             </div>
+            <p className="text-xs text-muted-foreground mt-2">Minimum $1 required for top-up</p>
           </div>
 
-          {/* Fee Breakdown */}
-          <div className="p-4 rounded-lg bg-muted/50 border border-border/30 space-y-2">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Top-up Amount</span>
-              <span className="font-semibold">${topupAmount.toFixed(2)}</span>
+          {/* Fee Breakdown - Styled like the demo */}
+          <div className="space-y-3">
+            {/* Top-up Amount */}
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/30">
+              <p className="text-xs text-muted-foreground font-semibold mb-2">TOP-UP AMOUNT</p>
+              <div className="flex items-baseline justify-between">
+                <p className="text-3xl font-bold text-primary">${topupAmount.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Funds added to card</p>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Fixed Fee</span>
-              <span className="font-semibold">${FIXED_FEE.toFixed(2)}</span>
+
+            {/* Fixed Fee */}
+            <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
+              <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
+              <div className="flex items-baseline justify-between">
+                <p className="text-3xl font-bold text-secondary">${serviceFee.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Variable</p>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Service Fee (2.00%)</span>
-              <span className="font-semibold">${(topupAmount * SERVICE_FEE_PERCENT).toFixed(2)}</span>
+
+            {/* Total Amount */}
+            <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
+              <p className="text-xs text-muted-foreground font-semibold mb-2">TOTAL AMOUNT TO PAY</p>
+              <p className="text-4xl font-bold text-accent">${totalToCharge.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-2">Topup + Fees</p>
             </div>
-            <div className="border-t border-border/30 pt-2 flex justify-between items-center">
-              <span className="font-bold text-foreground">Total Deducted</span>
-              <span className="font-bold text-primary text-lg">${totalAmount.toFixed(2)}</span>
+
+            {/* New Balance Info */}
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
+              <p className="text-xs text-muted-foreground mb-1">After top-up, your card balance will be:</p>
+              <p className="text-xl font-bold text-primary">${finalBalance.toFixed(2)}</p>
             </div>
           </div>
 
@@ -437,9 +458,15 @@ function FundCardModal({
               className="flex-1 bg-gradient-to-r from-primary to-secondary"
             >
               {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processing...
+                </>
               ) : (
-                "Add Funds"
+                <>
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Continue to Payment - ${totalToCharge.toFixed(2)}
+                </>
               )}
             </Button>
           </div>
