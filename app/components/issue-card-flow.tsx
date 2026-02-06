@@ -186,13 +186,24 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
       const issueData = await issueResponse.json()
 
       if (!issueResponse.ok) {
-        throw new Error(issueData.error || "Failed to issue card")
+        console.error("[IssueCard] Error response:", issueData)
+        throw new Error(issueData.error || issueData.details || "Failed to issue card")
+      }
+
+      if (!issueData.success) {
+        console.error("[IssueCard] Response not successful:", issueData)
+        throw new Error(issueData.error || issueData.message || "Card creation failed")
       }
 
       // Short delay for UX then show success
       setTimeout(() => {
-        setIssuedCard(issueData.card)
-        setStep("success")
+        if (issueData.card) {
+          setIssuedCard(issueData.card)
+          setStep("success")
+        } else {
+          setError("Card was created but details could not be retrieved. Check your dashboard.")
+          setStep("form")
+        }
       }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to complete payment")

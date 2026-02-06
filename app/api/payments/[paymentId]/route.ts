@@ -47,6 +47,27 @@ export async function POST(
 
     // Check if already completed
     if (payment.status === "COMPLETED") {
+      // If card was already issued, return the card info
+      if (payment.issuedCardId) {
+        const existingCard = await prisma.card.findUnique({
+          where: { id: payment.issuedCardId },
+        })
+        if (existingCard) {
+          return NextResponse.json({
+            success: true,
+            message: "Card already issued",
+            card: {
+              id: existingCard.id,
+              cardNumber: existingCard.cardNumber,
+              expiryDate: existingCard.expiryDate,
+              cvv: existingCard.cvv,
+              nameOnCard: existingCard.nameOnCard,
+              balance: existingCard.balance,
+              status: existingCard.status,
+            },
+          })
+        }
+      }
       return NextResponse.json(
         { error: "Payment already processed" },
         { status: 400 }
@@ -65,82 +86,89 @@ export async function POST(
       )
     }
 
-    // Update status to confirming
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { 
-        status: "CONFIRMING",
-        txSignature,
-      },
-    })
-
-    // Verify the transaction
-    const verification = await verifyPayment(txSignature, payment.amountSol, payment.senderWallet || undefined)
-
-    if (!verification.verified) {
+    // If auto-verify already verified the payment, skip re-verification
+    const alreadyVerified = payment.status === "VERIFIED"
+    
+    if (alreadyVerified) {
+      console.log(`[Payments] Payment ${payment.id} already verified by auto-verify, skipping re-verification`)
+    } else {
+      // Update status to confirming
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { status: "FAILED" },
+        data: { 
+          status: "CONFIRMING",
+          txSignature,
+        },
       })
-      return NextResponse.json(
-        { error: verification.error || "Payment verification failed" },
-        { status: 400 }
-      )
-    }
 
-    // For card issuance: Verify the sender holds required tokens
-    if (payment.cardType === "issue") {
-      const senderWallet = verification.senderWallet
-      
-      if (!senderWallet) {
+      // Verify the transaction
+      const verification = await verifyPayment(txSignature, payment.amountSol, payment.senderWallet || undefined)
+
+      if (!verification.verified) {
         await prisma.payment.update({
           where: { id: payment.id },
           data: { status: "FAILED" },
         })
         return NextResponse.json(
-          { error: "Could not determine payment sender wallet address" },
+          { error: verification.error || "Payment verification failed" },
           { status: 400 }
         )
       }
 
-      console.log(`[Token Gate] Checking if payment sender ${senderWallet} holds required tokens`)
-      
-      try {
-        const tokenCheck = await checkTokenHolding(senderWallet)
+      // For card issuance: Verify the sender holds required tokens
+      if (payment.cardType === "issue") {
+        const senderWallet = verification.senderWallet
         
-        if (!tokenCheck.hasRequiredTokens) {
+        if (!senderWallet) {
           await prisma.payment.update({
             where: { id: payment.id },
             data: { status: "FAILED" },
           })
           return NextResponse.json(
+            { error: "Could not determine payment sender wallet address" },
+            { status: 400 }
+          )
+        }
+
+        console.log(`[Token Gate] Checking if payment sender ${senderWallet} holds required tokens`)
+        
+        try {
+          const tokenCheck = await checkTokenHolding(senderWallet)
+          
+          if (!tokenCheck.hasRequiredTokens) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "FAILED" },
+            })
+            return NextResponse.json(
+              { 
+                error: `Payment sender does not hold enough tokens. Required: ${tokenCheck.required}, Current balance: ${tokenCheck.balance}`,
+                requiredTokens: tokenCheck.required,
+                currentBalance: tokenCheck.balance,
+              },
+              { status: 400 }
+            )
+          }
+          
+          console.log(`[Token Gate] ✅ Payment sender ${senderWallet} has ${tokenCheck.balance} tokens - ELIGIBLE`)
+        } catch (tokenError) {
+          console.error("[Token Gate] Error checking token holdings:", tokenError)
+          return NextResponse.json(
             { 
-              error: `Payment sender does not hold enough tokens. Required: ${tokenCheck.required}, Current balance: ${tokenCheck.balance}`,
-              requiredTokens: tokenCheck.required,
-              currentBalance: tokenCheck.balance,
+              error: "Failed to verify token holdings. Please try again.",
+              details: tokenError instanceof Error ? tokenError.message : "Unknown error",
             },
             { status: 400 }
           )
         }
-        
-        console.log(`[Token Gate] ✅ Payment sender ${senderWallet} has ${tokenCheck.balance} tokens - ELIGIBLE`)
-      } catch (tokenError) {
-        console.error("[Token Gate] Error checking token holdings:", tokenError)
-        return NextResponse.json(
-          { 
-            error: "Failed to verify token holdings. Please try again.",
-            details: tokenError instanceof Error ? tokenError.message : "Unknown error",
-          },
-          { status: 400 }
-        )
       }
-    }
 
-    // Payment verified - update status
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: "VERIFIED" },
-    })
+      // Payment verified - update status
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "VERIFIED" },
+      })
+    }
 
     // Process based on card type
     if (payment.cardType === "issue") {
@@ -172,12 +200,10 @@ export async function POST(
       // Issue new card
       try {
         // IMPORTANT: Only send the topup amount to KripiCard, not the fees
-        // The card balance should be the topup amount the user requested
         const cardAmount = topupAmount
         console.log(`[Card Creation] Card amount to send to Kripi: ${cardAmount}`)
         console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
         
-        // Prepare card creation parameters
         const cardName = (payment.nameOnCard || user.name || "CARDHOLDER").toUpperCase()
         const cardEmail = user.email || "noemail@example.com"
         
@@ -187,13 +213,42 @@ export async function POST(
         console.log(`  - Amount (topup only, no fees): ${cardAmount}`)
         console.log(`  - User ID: ${user.id}`)
         
-        console.log(`[Card Creation] About to call createKripiCard with:`, {
-          amount: cardAmount,
-          name_on_card: cardName,
-          email: cardEmail,
-          bankBin: "49387520",
+        // Check if a card was already created for this payment (retry scenario)
+        const existingCard = await prisma.card.findFirst({
+          where: {
+            userId: user.id,
+            createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // Within last 5 min
+          },
+          orderBy: { createdAt: "desc" },
         })
-        
+
+        // If there's already a card linked to this payment, return it
+        if (payment.issuedCardId) {
+          const linkedCard = await prisma.card.findUnique({
+            where: { id: payment.issuedCardId },
+          })
+          if (linkedCard) {
+            console.log(`[Card Creation] Card already linked to payment: ${linkedCard.id}`)
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "COMPLETED" },
+            })
+            return NextResponse.json({
+              success: true,
+              message: "Card already issued",
+              card: {
+                id: linkedCard.id,
+                cardNumber: linkedCard.cardNumber,
+                expiryDate: linkedCard.expiryDate,
+                cvv: linkedCard.cvv,
+                nameOnCard: linkedCard.nameOnCard,
+                balance: linkedCard.balance,
+                status: linkedCard.status,
+              },
+            })
+          }
+        }
+
         const kripiResponse = await createKripiCard({
           amount: cardAmount,
           name_on_card: cardName,
@@ -208,35 +263,63 @@ export async function POST(
           throw new Error("KripiCard API returned invalid response - missing card_id")
         }
 
-        console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id}`)
-        console.log(`[Card Creation] Card details from Kripi:`, {
-          card_id: kripiResponse.card_id,
-          card_number: kripiResponse.card_number,
-          expiry_date: kripiResponse.expiry_date,
-          cvv: kripiResponse.cvv,
-          balance: kripiResponse.balance,
-        })
+        console.log(`[Card Creation] ✅ Card created on KripiCard: ${kripiResponse.card_id}`)
 
-        // Store card in database
-        console.log(`[Card Creation] Storing card in database...`)
-        const card = await prisma.card.create({
-          data: {
-            kripiCardId: kripiResponse.card_id,
-            cardNumber: kripiResponse.card_number || "****",
-            expiryDate: kripiResponse.expiry_date || "12/25",
-            cvv: kripiResponse.cvv || "***",
-            nameOnCard: cardName,
-            balance: kripiResponse.balance || cardAmount,
-            userId: user.id,
-          },
-        })
-
-        console.log(`[Card Creation] ✅ Card stored in database:`, {
-          id: card.id,
-          kripiCardId: card.kripiCardId,
-          balance: card.balance,
-          status: card.status,
-        })
+        // Store card in database - with retry logic
+        let card
+        try {
+          console.log(`[Card Creation] Storing card in database...`)
+          card = await prisma.card.create({
+            data: {
+              kripiCardId: kripiResponse.card_id,
+              cardNumber: kripiResponse.card_number || "****",
+              expiryDate: kripiResponse.expiry_date || "12/25",
+              cvv: kripiResponse.cvv || "***",
+              nameOnCard: cardName,
+              balance: kripiResponse.balance || cardAmount,
+              userId: user.id,
+            },
+          })
+          console.log(`[Card Creation] ✅ Card stored in database: ${card.id}`)
+        } catch (dbError) {
+          console.error(`[Card Creation] ❌ Database save failed:`, dbError)
+          
+          // Check if it's a duplicate kripiCardId error (card already saved)
+          if (dbError instanceof Error && dbError.message.includes("Unique constraint")) {
+            const existingByKripi = await prisma.card.findUnique({
+              where: { kripiCardId: kripiResponse.card_id },
+            })
+            if (existingByKripi) {
+              console.log(`[Card Creation] Card already exists in DB with kripiCardId: ${kripiResponse.card_id}`)
+              card = existingByKripi
+            }
+          }
+          
+          // If we still don't have a card record, return the KripiCard data directly
+          // so the user at least gets their card details
+          if (!card) {
+            console.error(`[Card Creation] ⚠️ Returning KripiCard data directly (DB save failed)`)
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "COMPLETED" },
+            }).catch(() => {})
+            
+            return NextResponse.json({
+              success: true,
+              message: "Card created but database save had an issue. Your card is active.",
+              card: {
+                id: kripiResponse.card_id,
+                cardNumber: kripiResponse.card_number || "****",
+                expiryDate: kripiResponse.expiry_date || "12/25",
+                cvv: kripiResponse.cvv || "***",
+                nameOnCard: cardName,
+                balance: kripiResponse.balance || cardAmount,
+                status: "ACTIVE",
+              },
+              warning: "Card was created successfully on the provider but could not be saved to your account. Please contact support with card ID: " + kripiResponse.card_id,
+            })
+          }
+        }
 
         // Update payment as completed
         await prisma.payment.update({
