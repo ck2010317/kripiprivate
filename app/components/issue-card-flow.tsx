@@ -503,12 +503,21 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
               </div>
             </div>
 
+            {/* Service Fee - Dynamic */}
+            <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
+              <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
+              <div className="flex items-baseline justify-between">
+                <p className="text-3xl font-bold text-secondary">${((parseFloat(topupAmount || "10") * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT).toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Variable</p>
+              </div>
+            </div>
+
             {/* Total Amount */}
-            <div className="p-4 rounded-lg bg-secondary/10 border border-secondary/30">
+            <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
               <p className="text-xs text-muted-foreground font-semibold mb-2">TOTAL AMOUNT TO PAY</p>
               <div className="flex items-baseline justify-between">
-                <p className="text-4xl font-bold text-primary">${(parseFloat(topupAmount || "10") + CARD_ISSUANCE_FEE).toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Topup + Fee</p>
+                <p className="text-4xl font-bold text-accent">${(parseFloat(topupAmount || "10") + CARD_ISSUANCE_FEE + ((parseFloat(topupAmount || "10") * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT)).toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Topup + Fees</p>
               </div>
             </div>
 
