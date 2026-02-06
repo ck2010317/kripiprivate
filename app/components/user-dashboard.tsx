@@ -319,9 +319,16 @@ function FundCardModal({
   onClose: () => void
   onSuccess: () => void 
 }) {
-  const [amount, setAmount] = useState("")
+  const [amount, setAmount] = useState("10")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  const FIXED_FEE = 1.0
+  const SERVICE_FEE_PERCENT = 0.02
+
+  const topupAmount = parseFloat(amount) || 0
+  const serviceFee = topupAmount > 0 ? topupAmount * SERVICE_FEE_PERCENT + FIXED_FEE : 0
+  const totalAmount = topupAmount + serviceFee
 
   const handleFund = async () => {
     const fundAmount = parseFloat(amount)
@@ -334,10 +341,10 @@ function FundCardModal({
     setError("")
 
     try {
-      const response = await fetch(`/api/cards/${card.id}`, {
+      const response = await fetch(`/api/cards/${card.id}/fund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "fund", amount: fundAmount }),
+        body: JSON.stringify({ amount: fundAmount }),
       })
 
       const data = await response.json()
@@ -355,51 +362,84 @@ function FundCardModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
-      <Card className="relative z-10 w-full max-w-md mx-4 p-6 bg-card border-border/50">
-        <h3 className="text-xl font-bold mb-4">Fund Card</h3>
-        <p className="text-muted-foreground mb-4">
-          Current balance: <span className="text-primary font-semibold">${card.balance.toFixed(2)}</span>
-        </p>
+      <Card className="relative z-10 w-full max-w-md bg-card border-border/50 overflow-hidden">
+        {/* Header */}
+        <div className="p-6 border-b border-border/50">
+          <h3 className="text-2xl font-bold">Fund Card</h3>
+          <p className="text-muted-foreground mt-1">
+            Current balance: <span className="text-primary font-semibold">${card.balance.toFixed(2)}</span>
+          </p>
+        </div>
 
+        {/* Error */}
         {error && (
-          <div className="p-3 mb-4 rounded-lg bg-destructive/10 border border-destructive/30">
+          <div className="mx-6 mt-6 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
             <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
 
-        <div className="space-y-4">
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Amount Input */}
           <div>
-            <label className="text-sm font-medium">Amount (USD)</label>
-            <div className="relative mt-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <label className="text-sm font-medium block mb-3">Amount (USD)</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-muted-foreground">$</span>
               <input
                 type="number"
                 min="1"
-                step="1"
+                step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="50"
-                className="w-full pl-8 pr-4 py-3 rounded-lg bg-input border border-border/50 focus:border-primary outline-none"
+                className="w-full pl-8 pr-16 py-3 rounded-lg bg-input border border-primary/30 focus:border-primary outline-none text-lg font-semibold"
               />
+              <button 
+                onClick={() => setAmount("50")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+              >
+                MAX
+              </button>
             </div>
           </div>
 
-          <div className="flex gap-3">
+          {/* Fee Breakdown */}
+          <div className="p-4 rounded-lg bg-muted/50 border border-border/30 space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Top-up Amount</span>
+              <span className="font-semibold">${topupAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Fixed Fee</span>
+              <span className="font-semibold">${FIXED_FEE.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Service Fee (2.00%)</span>
+              <span className="font-semibold">${(topupAmount * SERVICE_FEE_PERCENT).toFixed(2)}</span>
+            </div>
+            <div className="border-t border-border/30 pt-2 flex justify-between items-center">
+              <span className="font-bold text-foreground">Total Deducted</span>
+              <span className="font-bold text-primary text-lg">${totalAmount.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-4">
             <Button variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
             <Button 
               onClick={handleFund} 
-              disabled={loading}
+              disabled={loading || topupAmount < 1}
               className="flex-1 bg-gradient-to-r from-primary to-secondary"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                "Fund Card"
+                "Add Funds"
               )}
             </Button>
           </div>
