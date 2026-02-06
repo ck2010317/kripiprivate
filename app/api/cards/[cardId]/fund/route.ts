@@ -7,11 +7,11 @@ const SERVICE_FEE_PERCENT = 0.02 // 2%
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { cardId: string } }
+  { params }: { params: Promise<{ cardId: string }> }
 ) {
   try {
     const { amount } = await req.json()
-    const cardId = params.cardId
+    const { cardId } = await params
 
     if (!amount || amount < 1) {
       return NextResponse.json(
