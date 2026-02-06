@@ -291,7 +291,7 @@ export async function POST(
         console.error("[Card Creation] Returning error response:", errorResponse)
         return NextResponse.json(errorResponse, { status: 500 })
       }
-    } else if (payment.cardType === "topup" && payment.targetCardId) {
+    } else if ((payment.cardType === "topup" || payment.cardType === "fund") && payment.targetCardId) {
       // Fund existing card with the actual topup amount (not including fee)
       const card = await prisma.card.findFirst({
         where: {
