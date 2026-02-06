@@ -173,17 +173,28 @@ export async function POST(
         const cardAmount = topupAmount + 5 // topup + $5 fee
         console.log(`[Card Creation] Card amount to send: ${cardAmount}`)
         console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
+        
+        // Prepare card creation parameters
+        const cardName = (payment.nameOnCard || user.name || "CARDHOLDER").toUpperCase()
+        const cardEmail = user.email || "noemail@example.com"
+        
+        console.log(`[Card Creation] Parameters:`)
+        console.log(`  - Name: ${cardName}`)
+        console.log(`  - Email: ${cardEmail}`)
+        console.log(`  - Amount: ${cardAmount}`)
+        console.log(`  - User ID: ${user.id}`)
+        
         console.log(`[Card Creation] About to call createKripiCard with:`, {
           amount: cardAmount,
-          name_on_card: payment.nameOnCard || user.name,
-          email: user.email,
+          name_on_card: cardName,
+          email: cardEmail,
           bankBin: "49387520",
         })
         
         const kripiResponse = await createKripiCard({
           amount: cardAmount,
-          name_on_card: payment.nameOnCard || user.name,
-          email: user.email,
+          name_on_card: cardName,
+          email: cardEmail,
           bankBin: "49387520",
         })
 

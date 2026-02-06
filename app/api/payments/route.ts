@@ -19,7 +19,15 @@ export async function POST(request: NextRequest) {
 
     const { amountUsd, nameOnCard, cardType, targetCardId, topupAmount, topupFee } = await request.json()
 
-    // Validation
+    // Log what we're receiving
+    console.log("[Payments] Creating payment with:", {
+      amountUsd,
+      nameOnCard,
+      cardType,
+      targetCardId,
+      topupAmount,
+      topupFee,
+    })
     if (!amountUsd || amountUsd < 5) {
       return NextResponse.json(
         { error: "Amount must be at least $5" },
@@ -60,6 +68,14 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         expiresAt,
       },
+    })
+
+    console.log("[Payments] Created payment:", {
+      id: payment.id,
+      amountUsd: payment.amountUsd,
+      topupAmount: payment.topupAmount,
+      topupFee: payment.topupFee,
+      cardType: payment.cardType,
     })
 
     return NextResponse.json({
