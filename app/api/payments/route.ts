@@ -42,35 +42,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // NOTE: Temporarily allow topupAmount < $10 for testing backend error messages
-    // This will be reverted after testing
-    // For fund/topup operations, validate that topup amount is valid
+    // For fund/topup operations, validate that topup amount meets KripiCard minimum
     if ((cardType === "topup" || cardType === "fund") && topupAmount) {
-      if (topupAmount < 1) {
-        console.error("[Payments] ❌ Topup amount invalid:", {
+      if (topupAmount < KRIPICARD_MIN_FUND) {
+        console.error("[Payments] ❌ Topup amount below KripiCard minimum:", {
           topupAmount,
+          minimum: KRIPICARD_MIN_FUND,
           cardType,
         })
         return NextResponse.json(
           { 
-            error: `Fund amount must be at least $1`,
+            error: `Fund amount must be at least $${KRIPICARD_MIN_FUND}`,
+            details: `The topup amount ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
             topupAmount,
+            minimum: KRIPICARD_MIN_FUND,
           },
           { status: 400 }
         )
       }
     }
 
-    // For card issuance, allow any amount >= $1 for testing
+    // For card issuance, validate that the topup/initial amount meets minimum
     if (cardType === "issue" && topupAmount) {
-      if (topupAmount < 1) {
-        console.error("[Payments] ❌ Card issuance amount invalid:", {
+      if (topupAmount < KRIPICARD_MIN_FUND) {
+        console.error("[Payments] ❌ Card issuance amount below KripiCard minimum:", {
           topupAmount,
+          minimum: KRIPICARD_MIN_FUND,
         })
         return NextResponse.json(
           { 
-            error: `Card balance must be at least $1`,
+            error: `Card balance must be at least $${KRIPICARD_MIN_FUND}`,
+            details: `The initial balance ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
             topupAmount,
+            minimum: KRIPICARD_MIN_FUND,
           },
           { status: 400 }
         )

@@ -326,9 +326,8 @@ export async function POST(
       // Use the actual topup amount for funding, not the total with fee
       const fundAmount = payment.topupAmount || payment.amountUsd
 
-      // NOTE: Temporarily allow amounts < $10 for testing backend error messages
-      // KripiCard's actual minimum is $10, but we allow it through to see the backend error
-      const KRIPICARD_MIN_FUND = 1 // Temporary test value
+      // CRITICAL: Validate minimum fund amount ($10 is KripiCard's minimum)
+      const KRIPICARD_MIN_FUND = 10
       if (fundAmount < KRIPICARD_MIN_FUND) {
         console.error("[Fund Card] ❌ Fund amount below minimum:", {
           fundAmount,
