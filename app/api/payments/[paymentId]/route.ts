@@ -144,8 +144,8 @@ export async function POST(
 
     // Process based on card type
     if (payment.cardType === "issue") {
-      // For card issuance, use the topupAmount from this payment
-      const topupAmount = payment.topupAmount || 10
+      // For card issuance, use the amountUsd minus the $5 fee for topup
+      const topupAmount = payment.topupAmount || (payment.amountUsd - 5) || 10
       
       if (topupAmount < 10) {
         await prisma.payment.update({
