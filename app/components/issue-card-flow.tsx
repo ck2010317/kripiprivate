@@ -307,7 +307,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
               </button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ⚠️ Send exactly <span className="font-semibold text-primary">{payment.amountSol.toFixed(6)} SOL</span> on Solana Devnet
+              ⚠️ Send exactly <span className="font-semibold text-primary">{payment.amountSol.toFixed(6)} SOL</span> on Solana Mainnet
             </p>
           </Card>
 
@@ -322,7 +322,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
             </p>
             <div className="flex gap-3">
               <a
-                href={`https://explorer.solana.com/?cluster=devnet`}
+                href={`https://explorer.solana.com/`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline flex items-center gap-1"
