@@ -60,23 +60,49 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
 
   console.log("[KripiCard] Creating card for", request.name_on_card, "- Amount:", request.amount)
   
+  // Validate inputs
+  if (!request.amount || request.amount <= 0) {
+    throw new Error(`Invalid amount: ${request.amount}. Amount must be greater than 0`)
+  }
+
+  if (!request.name_on_card || request.name_on_card.trim().length === 0) {
+    throw new Error("name_on_card is required and cannot be empty")
+  }
+
+  if (!request.email || request.email.trim().length === 0) {
+    throw new Error("email is required and cannot be empty")
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(request.email)) {
+    throw new Error(`Invalid email format: ${request.email}`)
+  }
+
   // Actually call the API
   try {
+    // Ensure amount is a number and round to 2 decimal places
+    const amount = Math.round(parseFloat(String(request.amount)) * 100) / 100
+    
     const payload = {
       api_key: API_KEY,
-      amount: request.amount,
+      amount: amount,
       bankBin: request.bankBin || "49387520",
-      name_on_card: request.name_on_card.toUpperCase(),
-      email: request.email,
+      name_on_card: request.name_on_card.toUpperCase().trim(),
+      email: request.email.toLowerCase().trim(),
     }
     
     console.log("[KripiCard] Payload keys:", Object.keys(payload))
     console.log("[KripiCard] API_KEY present:", !!API_KEY)
-    console.log("[KripiCard] Amount value:", request.amount, "Type:", typeof request.amount)
+    console.log("[KripiCard] API_KEY length:", API_KEY.length)
+    console.log("[KripiCard] Amount value:", amount, "Type:", typeof amount)
+    console.log("[KripiCard] Name on card:", payload.name_on_card, "(length:", payload.name_on_card.length, ")")
+    console.log("[KripiCard] Email:", payload.email)
     console.log("[KripiCard] Sending payload:", JSON.stringify(payload, null, 2))
     
     const url = `${KRIPICARD_BASE_URL}/premium/Create_card`
     console.log("[KripiCard] Calling URL:", url)
+    console.log("[KripiCard] Request headers:", { "Content-Type": "application/json" })
     
     const response = await fetch(url, {
       method: "POST",
@@ -87,25 +113,40 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     })
 
     console.log("[KripiCard] Response received, status:", response.status)
+    console.log("[KripiCard] Response status text:", response.statusText)
     
     const contentType = response.headers.get("content-type")
     console.log("[KripiCard] Response content-type:", contentType)
     
     if (!contentType || !contentType.includes("application/json")) {
       const text = await response.text()
-      console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
-      throw new Error(`API returned non-JSON: ${text.substring(0, 100)}`)
+      console.error("[KripiCard] Non-JSON response body:", text.substring(0, 500))
+      throw new Error(`API returned non-JSON (${response.status}): ${text.substring(0, 100)}`)
     }
 
     const data = await response.json()
     console.log("[KripiCard] Response status:", response.status)
     console.log("[KripiCard] Response data:", JSON.stringify(data, null, 2))
+    console.log("[KripiCard] Response data keys:", Object.keys(data))
+    console.log("[KripiCard] Response success field:", data.success)
 
-    if (!response.ok || !data.success) {
-      const errorMsg = data.message || `HTTP ${response.status}: API returned success=false`
+    if (!response.ok) {
+      const errorMsg = data.message || data.error || `HTTP ${response.status}`
       console.error("[KripiCard] ❌ API Error:", errorMsg)
       console.error("[KripiCard] Full response:", JSON.stringify(data, null, 2))
       throw new Error(`KripiCard API Error (${response.status}): ${errorMsg}`)
+    }
+
+    if (!data.success) {
+      const errorMsg = data.message || data.error || "API returned success=false"
+      console.error("[KripiCard] ❌ API returned success=false:", errorMsg)
+      console.error("[KripiCard] Full response:", JSON.stringify(data, null, 2))
+      throw new Error(`KripiCard API Error: ${errorMsg}`)
+    }
+
+    if (!data.card_id) {
+      console.error("[KripiCard] ❌ Missing card_id in response:", JSON.stringify(data, null, 2))
+      throw new Error("KripiCard API returned success but missing card_id")
     }
 
     console.log("[KripiCard] ✅ Card created:", data.card_id)

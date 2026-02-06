@@ -320,8 +320,20 @@ export async function POST(
   } catch (error) {
     console.error("[Payments] Verify payment error:", error)
     const message = error instanceof Error ? error.message : "Failed to verify payment"
+    const stack = error instanceof Error ? error.stack : ""
+    
+    console.error("[Payments] Error details:", {
+      message,
+      stack,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+    })
+    
     return NextResponse.json(
-      { error: message },
+      { 
+        error: message || "Failed to verify payment",
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     )
   }
