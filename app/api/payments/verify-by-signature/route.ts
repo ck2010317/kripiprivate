@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { verifyPayment } from "@/lib/solana-payment"
-import { createCard as createKripiCard, fundCard } from "@/lib/kripicard-client"
+import { createCard as createKripiCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Verify payment by transaction signature (manual verification)
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
 
       // Create card with proper parameters
       const card = await createKripiCard({
-        amount: payment.amountSol,
+        amount: payment.amountUsd,
         bankBin: "49387520",
         name_on_card: payment.nameOnCard || "Virtual Card",
         email: user.email || "noemail@example.com",
@@ -173,23 +173,6 @@ export async function POST(request: NextRequest) {
         })
         return NextResponse.json(
           { error: "Failed to create card" },
-          { status: 500 }
-        )
-      }
-
-      // Fund the card with SOL
-      const fundResult = await fundCard({
-        card_id: card.card_id,
-        amount: payment.amountSol,
-      })
-
-      if (!fundResult) {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: "FAILED" },
-        })
-        return NextResponse.json(
-          { error: "Failed to fund card" },
           { status: 500 }
         )
       }

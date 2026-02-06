@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { verifyPayment } from "@/lib/solana-payment"
-import { createCard as createKripiCard, fundCard } from "@/lib/kripicard-client"
+import { createCard as createKripiCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Verify payment and process card
@@ -164,24 +164,17 @@ export async function POST(
 
       // Issue new card
       try {
-        console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${topupAmount} topup...`)
-        // Create card with $0 balance first (since Kripicard account needs funding)
-        // Then fund it with the topup amount + fee
+        const cardAmount = topupAmount + 5 // topup + $5 fee
+        console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
+        
         const kripiResponse = await createKripiCard({
-          amount: 0,
+          amount: cardAmount,
           name_on_card: payment.nameOnCard || user.name,
           email: user.email,
           bankBin: "49387520",
         })
 
-        // Now fund the card with topup + fee amount
-        const fundResponse = await fundCard({
-          card_id: kripiResponse.card_id,
-          amount: topupAmount + 5,
-        })
-
-        console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id}`)
-        console.log(`[Card Creation] ✅ Card funded with $${fundResponse.new_balance}`)
+        console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id} with balance $${kripiResponse.balance}`)
 
         // Store card in database
         const card = await prisma.card.create({
@@ -191,7 +184,7 @@ export async function POST(
             expiryDate: kripiResponse.expiry_date,
             cvv: kripiResponse.cvv,
             nameOnCard: (payment.nameOnCard || user.name).toUpperCase(),
-            balance: fundResponse.new_balance, // Use the balance from fund response
+            balance: kripiResponse.balance,
             userId: user.id,
           },
         })
@@ -209,15 +202,15 @@ export async function POST(
           success: true,
           message: "Card issued successfully",
           card: {
-          id: card.id,
-          cardNumber: card.cardNumber,
-          expiryDate: card.expiryDate,
-          cvv: card.cvv,
-          nameOnCard: card.nameOnCard,
-          balance: card.balance,
-          status: card.status,
-        },
-      })
+            id: card.id,
+            cardNumber: card.cardNumber,
+            expiryDate: card.expiryDate,
+            cvv: card.cvv,
+            nameOnCard: card.nameOnCard,
+            balance: card.balance,
+            status: card.status,
+          },
+        })
       } catch (cardError) {
         console.error("[Card Creation] Error:", cardError)
         await prisma.payment.update({
