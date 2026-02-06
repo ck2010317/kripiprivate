@@ -316,25 +316,73 @@ export async function freezeUnfreezeCard(request: FreezeUnfreezeRequest): Promis
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
-  const response = await fetch(`${KRIPICARD_BASE_URL}/premium/Freeze_Unfreeze`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  console.log("[KripiCard] Attempting to", request.action, "card:", request.card_id)
+
+  try {
+    const payload = {
       api_key: API_KEY,
-      card_id: request.card_id,
+      card_id: request.card_id.trim(),
       action: request.action,
-    }),
-  })
+    }
 
-  const data = await response.json()
+    console.log("[KripiCard] Freeze/Unfreeze payload:", JSON.stringify(payload, null, 2))
 
-  if (!response.ok || !data.success) {
-    throw new Error(data.message || `Failed to ${request.action} card`)
+    const url = `${KRIPICARD_BASE_URL}/premium/Freeze_Unfreeze`
+    console.log("[KripiCard] Calling Freeze_Unfreeze endpoint:", url)
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+
+    console.log("[KripiCard] Freeze/Unfreeze response status:", response.status)
+
+    let data
+    try {
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text()
+        console.error("[KripiCard] Non-JSON response:", text.substring(0, 200))
+        throw new Error(`Expected JSON response but got ${contentType}`)
+      }
+      data = await response.json()
+    } catch (parseError) {
+      console.error("[KripiCard] Failed to parse freeze/unfreeze response:", parseError)
+      throw new Error(`Failed to parse freeze/unfreeze response: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+    }
+
+    console.log("[KripiCard] Freeze/Unfreeze response data:", JSON.stringify(data, null, 2))
+
+    if (!response.ok) {
+      const errorMsg = data.message || data.error || `HTTP ${response.status}`
+      console.error("[KripiCard] ❌ Freeze/Unfreeze API Error:", errorMsg)
+      throw new Error(`KripiCard Freeze/Unfreeze API Error (${response.status}): ${errorMsg}`)
+    }
+
+    if (!data.success) {
+      const errorMsg = data.message || data.error || "API returned success=false"
+      console.error("[KripiCard] ❌ Freeze/Unfreeze API returned success=false:", errorMsg)
+      throw new Error(`KripiCard Freeze/Unfreeze API Error: ${errorMsg}`)
+    }
+
+    console.log(`[KripiCard] ✅ Card ${request.action}d successfully. Status:`, data.status)
+
+    return {
+      success: true,
+      status: data.status || request.action.toUpperCase(),
+      message: data.message,
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error"
+    console.error("[KripiCard] ❌ Freeze/Unfreeze Exception:", errorMsg)
+    if (error instanceof Error) {
+      console.error("[KripiCard] Stack:", error.stack)
+    }
+    throw error
   }
-
-  return data
 }
 
 // Get card transactions from KripiCard

@@ -191,8 +191,14 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
           {step === "form" && (
             <div className="space-y-6">
               {error && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 space-y-2">
+                  <p className="text-sm font-semibold text-destructive">Error</p>
                   <p className="text-sm text-destructive">{error}</p>
+                  {error.includes("below") && (
+                    <p className="text-xs text-destructive/80 mt-2">
+                      💡 KripiCard requires a minimum of $10 per transaction.
+                    </p>
+                  )}
                 </div>
               )}
 

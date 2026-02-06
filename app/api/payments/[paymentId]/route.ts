@@ -307,49 +307,130 @@ export async function POST(
         )
       }
 
+      // Validate that card has kripiCardId
+      if (!card.kripiCardId || card.kripiCardId.trim().length === 0) {
+        console.error("[Fund Card] ❌ Card missing kripiCardId:", {
+          cardId: card.id,
+          kripiCardId: card.kripiCardId,
+          cardNumber: card.cardNumber,
+        })
+        return NextResponse.json(
+          { 
+            error: "Card is not properly initialized. Card ID is missing.",
+            details: "This card cannot be funded. Please contact support.",
+          },
+          { status: 400 }
+        )
+      }
+
       // Use the actual topup amount for funding, not the total with fee
       const fundAmount = payment.topupAmount || payment.amountUsd
+
+      // CRITICAL: Validate minimum fund amount ($10 is KripiCard's minimum)
+      const KRIPICARD_MIN_FUND = 10
+      if (fundAmount < KRIPICARD_MIN_FUND) {
+        console.error("[Fund Card] ❌ Fund amount below minimum:", {
+          fundAmount,
+          minimum: KRIPICARD_MIN_FUND,
+          kripiCardId: card.kripiCardId,
+          paymentId: payment.id,
+        })
+        
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "FAILED" },
+        })
+
+        return NextResponse.json(
+          { 
+            error: `Invalid fund amount. Minimum is $${KRIPICARD_MIN_FUND}`,
+            details: `The fund amount ($${fundAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
+            fundAmount,
+            minimum: KRIPICARD_MIN_FUND,
+          },
+          { status: 400 }
+        )
+      }
       
-      const fundResponse = await fundCard({
-        card_id: card.kripiCardId,
-        amount: fundAmount,
+      console.log(`[Fund Card] Starting fund process:`, {
+        targetCardId: payment.targetCardId,
+        dbCardId: card.id,
+        kripiCardId: card.kripiCardId,
+        fundAmount: fundAmount,
+        paymentId: payment.id,
       })
-
-      // Update card balance
-      await prisma.card.update({
-        where: { id: card.id },
-        data: { balance: fundResponse.new_balance },
-      })
-
-      // Log transaction
-      await prisma.cardTransaction.create({
-        data: {
-          cardId: card.id,
-          type: "FUND",
+      
+      try {
+        console.log(`[Fund Card] Calling fundCard API...`)
+        const fundResponse = await fundCard({
+          card_id: card.kripiCardId,
           amount: fundAmount,
-          description: `Card funded via Solana payment (${fundAmount.toFixed(2)})`,
-          status: "COMPLETED",
-          externalTxId: txSignature,
-          metadata: JSON.stringify({
-            paymentId: payment.id,
-            previousBalance: card.balance,
-            newBalance: fundResponse.new_balance,
-            serviceFee: payment.topupFee,
-          }),
-        },
-      })
+        })
 
-      // Update payment as completed
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: "COMPLETED" },
-      })
+        console.log(`[Fund Card] ✅ Fund successful:`, {
+          newBalance: fundResponse.new_balance,
+          message: fundResponse.message,
+        })
 
-      return NextResponse.json({
-        success: true,
-        message: "Card funded successfully",
-        newBalance: fundResponse.new_balance,
-      })
+        // Update card balance
+        await prisma.card.update({
+          where: { id: card.id },
+          data: { balance: fundResponse.new_balance },
+        })
+
+        // Log transaction
+        await prisma.cardTransaction.create({
+          data: {
+            cardId: card.id,
+            type: "FUND",
+            amount: fundAmount,
+            description: `Card funded via Solana payment (${fundAmount.toFixed(2)})`,
+            status: "COMPLETED",
+            externalTxId: txSignature,
+            metadata: JSON.stringify({
+              paymentId: payment.id,
+              previousBalance: card.balance,
+              newBalance: fundResponse.new_balance,
+              serviceFee: payment.topupFee,
+            }),
+          },
+        })
+
+        // Update payment as completed
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "COMPLETED" },
+        })
+
+        return NextResponse.json({
+          success: true,
+          message: "Card funded successfully",
+          newBalance: fundResponse.new_balance,
+        })
+      } catch (fundError) {
+        console.error("[Fund Card] ❌ Fund error:", fundError)
+        const errorMsg = fundError instanceof Error ? fundError.message : JSON.stringify(fundError)
+        console.error("[Fund Card] Error details:", {
+          message: errorMsg,
+          fundAmount,
+          kripiCardId: card.kripiCardId,
+          timestamp: new Date().toISOString(),
+        })
+        
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "FAILED" },
+        })
+
+        return NextResponse.json(
+          { 
+            error: "Failed to fund card",
+            details: errorMsg,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json(

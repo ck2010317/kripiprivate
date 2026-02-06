@@ -31,11 +31,54 @@ export async function POST(request: NextRequest) {
       cardFee,
       serviceFee,
     })
+
+    // Validate minimum amounts
+    const KRIPICARD_MIN_FUND = 10 // KripiCard minimum funding amount
+    
     if (!amountUsd || amountUsd < 1) {
       return NextResponse.json(
         { error: "Amount must be at least $1" },
         { status: 400 }
       )
+    }
+
+    // For fund/topup operations, validate that topup amount meets KripiCard minimum
+    if ((cardType === "topup" || cardType === "fund") && topupAmount) {
+      if (topupAmount < KRIPICARD_MIN_FUND) {
+        console.error("[Payments] ❌ Topup amount below KripiCard minimum:", {
+          topupAmount,
+          minimum: KRIPICARD_MIN_FUND,
+          cardType,
+        })
+        return NextResponse.json(
+          { 
+            error: `Fund amount must be at least $${KRIPICARD_MIN_FUND}`,
+            details: `The topup amount ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
+            topupAmount,
+            minimum: KRIPICARD_MIN_FUND,
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // For card issuance, validate that the topup/initial amount meets minimum
+    if (cardType === "issue" && topupAmount) {
+      if (topupAmount < KRIPICARD_MIN_FUND) {
+        console.error("[Payments] ❌ Card issuance amount below KripiCard minimum:", {
+          topupAmount,
+          minimum: KRIPICARD_MIN_FUND,
+        })
+        return NextResponse.json(
+          { 
+            error: `Card balance must be at least $${KRIPICARD_MIN_FUND}`,
+            details: `The initial balance ($${topupAmount.toFixed(2)}) is below KripiCard's minimum of $${KRIPICARD_MIN_FUND}`,
+            topupAmount,
+            minimum: KRIPICARD_MIN_FUND,
+          },
+          { status: 400 }
+        )
+      }
     }
 
     if (amountUsd > 10000) {
