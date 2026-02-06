@@ -79,8 +79,8 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
   console.log("[KripiCard] Creating card for", request.name_on_card, "- Amount:", request.amount)
   
   // Validate inputs
-  if (!request.amount || request.amount <= 0) {
-    throw new Error(`Invalid amount: ${request.amount}. Amount must be greater than 0`)
+  if (!request.amount || request.amount < 10) {
+    throw new Error(`Invalid amount: ${request.amount}. KripiCard requires a minimum of $10`)
   }
 
   if (!request.name_on_card || request.name_on_card.trim().length === 0) {
@@ -139,6 +139,10 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     if (!contentType || !contentType.includes("application/json")) {
       const text = await response.text()
       console.error("[KripiCard] Non-JSON response body:", text.substring(0, 500))
+      // KripiCard returns HTML redirect for amounts below minimum ($10)
+      if (text.includes("Redirecting") || text.includes("<!DOCTYPE")) {
+        throw new Error("KripiCard rejected the request. The minimum card amount is $10.")
+      }
       throw new Error(`API returned non-JSON (${response.status}): ${text.substring(0, 100)}`)
     }
 
@@ -167,9 +171,48 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
       throw new Error("KripiCard API returned success but missing card_id")
     }
 
-    // Ensure we have all required fields, with fallbacks
+    // Create_card only returns card_id - we need to fetch full details
+    console.log("[KripiCard] ✅ Card created with ID:", data.card_id)
+    console.log("[KripiCard] Fetching full card details via Get_CardDetails...")
+
+    // Wait a moment for the card to be fully provisioned
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    // Fetch full card details
+    try {
+      const detailsResponse = await fetch(
+        `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${data.card_id}`,
+        { method: "GET", headers: { "Content-Type": "application/json" } }
+      )
+
+      const detailsContentType = detailsResponse.headers.get("content-type")
+      if (detailsContentType && detailsContentType.includes("application/json")) {
+        const detailsData = await detailsResponse.json()
+        console.log("[KripiCard] Card details response:", JSON.stringify(detailsData, null, 2))
+
+        if (detailsData.success && detailsData.data?.details) {
+          const d = detailsData.data.details
+          const responseData: CreateCardResponse = {
+            success: true,
+            card_id: data.card_id,
+            card_number: d.number || "****",
+            expiry_date: d.expiryDate || "12/25",
+            cvv: d.cvv || "***",
+            balance: parseFloat(d.cardBalance) || request.amount,
+            message: data.message,
+          }
+          console.log("[KripiCard] ✅ Full card details retrieved:", JSON.stringify(responseData, null, 2))
+          return responseData
+        }
+      }
+    } catch (detailsError) {
+      console.error("[KripiCard] Failed to fetch card details after creation:", detailsError)
+    }
+
+    // Fallback if Get_CardDetails fails - return what we have
+    console.warn("[KripiCard] ⚠️ Could not fetch full details, returning partial data")
     const responseData: CreateCardResponse = {
-      success: data.success || true,
+      success: true,
       card_id: data.card_id,
       card_number: data.card_number || data.pan || "****",
       expiry_date: data.expiry_date || data.expiry || "12/25",
@@ -177,8 +220,6 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
       balance: data.balance || request.amount,
       message: data.message,
     }
-
-    console.log("[KripiCard] ✅ Card created with response:", JSON.stringify(responseData, null, 2))
     return responseData
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error"
@@ -341,6 +382,22 @@ export async function getCardDetails(cardId: string): Promise<CardDetailsRespons
     throw new Error(data.message || "Failed to get card details")
   }
 
+  // Map the nested response to our flat interface
+  if (data.data?.details) {
+    const d = data.data.details
+    return {
+      success: true,
+      card_id: cardId,
+      card_number: d.number || "****",
+      expiry_date: d.expiryDate || "12/25",
+      cvv: d.cvv || "***",
+      balance: parseFloat(d.cardBalance) || 0,
+      status: d.state === 1 ? "ACTIVE" : d.state === 2 ? "FROZEN" : "CANCELLED",
+      name_on_card: d.addressMv?.firstName || "",
+      message: data.message,
+    }
+  }
+
   return data
 }
 
@@ -468,52 +525,45 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
     }
 
-    // Search for transactions in every possible field name
-    const possibleTransactionFields = [
-      "transactions", "Transactions", "transaction", "Transaction",
-      "data", "Data", "records", "Records",
-      "history", "History", "card_transactions", "CardTransactions",
-      "activity", "Activity", "entries", "Entries",
-    ]
-
+    // KripiCard Get_CardDetails response structure:
+    // { success: true, data: { details: {...}, Transactions: [...] } }
     let rawTransactions: Record<string, unknown>[] = []
     let foundField = ""
 
-    for (const field of possibleTransactionFields) {
-      if (data[field] && Array.isArray(data[field])) {
-        rawTransactions = data[field] as Record<string, unknown>[]
-        foundField = field
-        console.log(`[KripiCard] Found transactions in field "${field}":`, rawTransactions.length, "items")
-        break
+    // Check the known structure first: data.data.Transactions (capital T)
+    const nestedData = data.data as Record<string, unknown> | undefined
+    if (nestedData) {
+      if (Array.isArray(nestedData.Transactions)) {
+        rawTransactions = nestedData.Transactions as Record<string, unknown>[]
+        foundField = "data.Transactions"
+        console.log(`[KripiCard] Found transactions in data.Transactions:`, rawTransactions.length, "items")
+      } else if (Array.isArray(nestedData.transactions)) {
+        rawTransactions = nestedData.transactions as Record<string, unknown>[]
+        foundField = "data.transactions"
+        console.log(`[KripiCard] Found transactions in data.transactions:`, rawTransactions.length, "items")
       }
     }
 
-    // Also check if there's a nested object that contains transactions
+    // Fallback: search all fields
     if (rawTransactions.length === 0) {
-      for (const key of Object.keys(data)) {
-        const val = data[key]
-        if (val && typeof val === "object" && !Array.isArray(val)) {
-          const nested = val as Record<string, unknown>
-          for (const field of possibleTransactionFields) {
-            if (nested[field] && Array.isArray(nested[field])) {
-              rawTransactions = nested[field] as Record<string, unknown>[]
-              foundField = `${key}.${field}`
-              console.log(`[KripiCard] Found transactions in nested field "${key}.${field}":`, rawTransactions.length, "items")
-              break
-            }
-          }
-          if (rawTransactions.length > 0) break
+      const possibleFields = ["Transactions", "transactions", "Transaction", "data", "records", "history"]
+      for (const field of possibleFields) {
+        if (data[field] && Array.isArray(data[field])) {
+          rawTransactions = data[field] as Record<string, unknown>[]
+          foundField = field
+          console.log(`[KripiCard] Found transactions in field "${field}":`, rawTransactions.length, "items")
+          break
         }
       }
     }
 
     if (rawTransactions.length === 0) {
-      console.log("[KripiCard] No transaction array found in response. Available keys:", Object.keys(data))
-      console.log("[KripiCard] Checking if entire response might be the card object with no transactions support...")
+      console.log("[KripiCard] No transactions found. Response keys:", Object.keys(data))
+      if (nestedData) console.log("[KripiCard] data.* keys:", Object.keys(nestedData))
       return {
         success: true,
         transactions: [],
-        message: "KripiCard API does not return transaction history. Transactions are visible on the KripiCard dashboard.",
+        message: "No transactions found for this card.",
       }
     }
 

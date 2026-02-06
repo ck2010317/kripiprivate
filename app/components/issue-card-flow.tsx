@@ -55,7 +55,7 @@ const REQUIRED_TOKEN_AMOUNT = 1000
 export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
   const { user, logout } = useAuth()
   const [step, setStep] = useState<"form" | "payment" | "verifying" | "processing" | "success">("form")
-  const [topupAmount, setTopupAmount] = useState("10") // Minimum $10 topup
+  const [topupAmount, setTopupAmount] = useState("10") // Minimum $10 (KripiCard minimum)
   const [nameOnCard, setNameOnCard] = useState(user?.name || "")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
