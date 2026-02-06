@@ -1,0 +1,6 @@
+{
+  "buildCommand": "rm -rf .next .turbo && bun run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "skipGitConnectivity": true
+}

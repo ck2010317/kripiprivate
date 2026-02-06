@@ -1,0 +1,115 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  cards         Card[]
+  sessions      Session[]
+  payments      Payment[]
+}
+
+model Card {
+  id              String   @id @default(cuid())
+  
+  // KripiCard API fields
+  kripiCardId     String   @unique  // The card_id from KripiCard API
+  cardNumber      String             // Masked or full card number
+  expiryDate      String
+  cvv             String
+  nameOnCard      String
+  bankBin         String   @default("49387520")
+  
+  // Card status
+  balance         Float    @default(0)
+  status          CardStatus @default(ACTIVE)
+  
+  // Ownership
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+enum CardStatus {
+  ACTIVE
+  FROZEN
+  CANCELLED
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  
+  // Payment details
+  amountUsd       Float         // Total amount to pay in USD (including fees)
+  amountSol       Float         // Amount to pay in SOL
+  solPriceAtTime  Float         // SOL/USD price when payment was created
+  
+  // For topups: track the actual topup amount vs fees
+  topupAmount     Float?        // Actual topup amount (before fees)
+  topupFee        Float?        // Fee charged for topup (2.5% + $1)
+  
+  // Transaction tracking
+  txSignature     String?       // Solana transaction signature
+  senderWallet    String?       // Wallet address that sent the payment
+  status          PaymentStatus @default(PENDING)
+  
+  // Card details (for after payment is verified)
+  cardType        String        @default("issue")  // "issue" or "topup"
+  nameOnCard      String?
+  targetCardId    String?       // For topups - the card to fund
+  
+  // Ownership
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Resulting card (once issued)
+  issuedCardId    String?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  expiresAt       DateTime      // Payment expires after some time
+
+  @@index([userId])
+  @@index([status])
+  @@index([txSignature])
+  @@index([senderWallet])
+}
+
+enum PaymentStatus {
+  PENDING     // Waiting for payment
+  CONFIRMING  // Payment detected, confirming
+  VERIFIED    // Payment verified
+  COMPLETED   // Card issued/funded
+  EXPIRED     // Payment window expired
+  FAILED      // Payment failed
+}
