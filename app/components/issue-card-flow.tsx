@@ -293,7 +293,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
             
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b border-border">
-                <span className="text-muted-foreground">Card Amount</span>
+                <span className="text-muted-foreground">Total (Card + Fees)</span>
                 <span className="font-semibold">${payment.amountUsd.toFixed(2)} USD</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-border">

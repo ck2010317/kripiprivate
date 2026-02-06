@@ -213,15 +213,6 @@ export async function POST(
         console.log(`  - Amount (topup only, no fees): ${cardAmount}`)
         console.log(`  - User ID: ${user.id}`)
         
-        // Check if a card was already created for this payment (retry scenario)
-        const existingCard = await prisma.card.findFirst({
-          where: {
-            userId: user.id,
-            createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // Within last 5 min
-          },
-          orderBy: { createdAt: "desc" },
-        })
-
         // If there's already a card linked to this payment, return it
         if (payment.issuedCardId) {
           const linkedCard = await prisma.card.findUnique({

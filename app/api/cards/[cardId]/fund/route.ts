@@ -13,9 +13,9 @@ export async function POST(
     const { amount } = await req.json()
     const { cardId } = await params
 
-    if (!amount || amount < 1) {
+    if (!amount || amount < 10) {
       return NextResponse.json(
-        { error: "Amount must be at least $1" },
+        { error: "Amount must be at least $10 (KripiCard minimum)" },
         { status: 400 }
       )
     }

@@ -509,8 +509,8 @@ function FundCardModal({
 
   const handleFund = async () => {
     const fundAmount = parseFloat(amount)
-    if (isNaN(fundAmount) || fundAmount < 1) {
-      setError("Amount must be at least $1")
+    if (isNaN(fundAmount) || fundAmount < 10) {
+      setError("Amount must be at least $10 (KripiCard minimum)")
       return
     }
 
@@ -611,7 +611,7 @@ function FundCardModal({
                   MAX
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Minimum $1 required for top-up</p>
+              <p className="text-xs text-muted-foreground mt-2">Minimum $10 required for top-up</p>
             </div>
 
             {/* Fee Breakdown - Styled like the demo */}
@@ -746,7 +746,7 @@ function FundCardModal({
                   </Button>
                   <Button 
                     onClick={handleAutoVerifyPayment}
-                    disabled={autoVerifying || step === "verifying"}
+                    disabled={autoVerifying}
                     className="flex-1 bg-gradient-to-r from-primary to-secondary"
                   >
                     {autoVerifying ? (
@@ -851,7 +851,7 @@ function TransactionHistoryModal({
     }
   }, [card.id, activeTab])
 
-  const getTransactionIcon = (type: Transaction["type"]) => {
+  const getTransactionIcon = (type: CardTransaction["type"]) => {
     switch (type) {
       case "FUND":
         return "💚"
@@ -870,7 +870,7 @@ function TransactionHistoryModal({
     }
   }
 
-  const getTransactionColor = (type: Transaction["type"]) => {
+  const getTransactionColor = (type: CardTransaction["type"]) => {
     switch (type) {
       case "FUND":
         return "text-green-500"

@@ -601,7 +601,7 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
         type,
         amount,
         merchant,
-        description: String(tx.description ?? tx.Description ?? tx.memo ?? tx.note ?? merchant || type),
+        description: String(tx.description ?? tx.Description ?? tx.memo ?? tx.note ?? (merchant || type)),
         date: String(tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? tx.timestamp ?? new Date().toISOString()),
         status: String(tx.status ?? tx.Status ?? "completed").toLowerCase(),
         currency: String(tx.currency ?? tx.Currency ?? "USD"),
