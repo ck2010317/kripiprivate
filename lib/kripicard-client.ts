@@ -470,9 +470,50 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       }
     }
 
+    // Normalize transaction data from KripiCard API
+    // The API may return fields with different names/formats than our interface expects
+    const rawTransactions = data.transactions || data.data || []
+    const normalizedTransactions: CardTransaction[] = rawTransactions.map((tx: Record<string, unknown>, index: number) => {
+      // Parse amount - handle formats like "$-10.15", "-10.15", or numeric values
+      let amount = 0
+      const rawAmount = tx.amount ?? tx.Amount ?? tx.transaction_amount ?? 0
+      if (typeof rawAmount === "string") {
+        amount = Math.abs(parseFloat(rawAmount.replace(/[^\d.-]/g, "")) || 0)
+      } else if (typeof rawAmount === "number") {
+        amount = Math.abs(rawAmount)
+      }
+
+      // Map KripiCard type to our normalized type
+      const rawType = String(tx.type ?? tx.Type ?? tx.transaction_type ?? "unknown").toLowerCase()
+      let type = rawType
+      if (rawType === "consumption" || rawType === "purchase" || rawType === "pos") {
+        type = "purchase"
+      } else if (rawType === "refund" || rawType === "reversal") {
+        type = "refund"
+      } else if (rawType === "cashback") {
+        type = "cashback"
+      } else if (rawType === "charge" || rawType === "fee") {
+        type = "charge"
+      }
+
+      return {
+        transaction_id: String(tx.transaction_id ?? tx.id ?? tx.txn_id ?? `tx-${index}`),
+        card_id: String(tx.card_id ?? tx.cardId ?? cardId),
+        type,
+        amount,
+        merchant: String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? ""),
+        description: String(tx.description ?? tx.Description ?? tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? type),
+        date: String(tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? new Date().toISOString()),
+        status: String(tx.status ?? tx.Status ?? "completed").toLowerCase(),
+        currency: String(tx.currency ?? tx.Currency ?? "USD"),
+      }
+    })
+
+    console.log("[KripiCard] Normalized", normalizedTransactions.length, "transactions")
+
     return {
       success: true,
-      transactions: data.transactions || [],
+      transactions: normalizedTransactions,
       message: data.message,
     }
   } catch (error) {

@@ -970,9 +970,11 @@ function TransactionHistoryModal({
                              tx.type === "cashback" ? "💰" : "💳"}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium break-words">{tx.description || tx.type}</p>
-                            {tx.merchant && (
-                              <p className="text-sm text-muted-foreground mt-1">{tx.merchant}</p>
+                            <p className="font-medium break-words">
+                              {tx.merchant || tx.description || tx.type}
+                            </p>
+                            {tx.merchant && tx.description && tx.description !== tx.merchant && (
+                              <p className="text-sm text-muted-foreground mt-1">{tx.description}</p>
                             )}
                             <p className="text-xs text-muted-foreground mt-2">
                               {new Date(tx.date).toLocaleString()}
@@ -983,11 +985,19 @@ function TransactionHistoryModal({
                         {/* Right: Amount & Status */}
                         <div className="flex flex-col items-end flex-shrink-0">
                           <p className={`text-lg font-bold ${
-                            tx.type === "refund" ? "text-green-500" : "text-red-500"
+                            tx.type === "refund" || tx.type === "cashback" ? "text-green-500" : "text-red-500"
                           }`}>
-                            {tx.type === "refund" ? "+" : "-"}${tx.amount.toFixed(2)}
+                            {tx.type === "refund" || tx.type === "cashback" ? "+" : "-"}${tx.amount.toFixed(2)}
                           </p>
-                          <span className="inline-block mt-2 px-2 py-1 text-xs rounded-full bg-muted/50 text-muted-foreground capitalize">
+                          <span className={`inline-block mt-2 px-2 py-1 text-xs rounded-full capitalize ${
+                            tx.status === "completed" || tx.status === "settled" 
+                              ? "bg-green-500/20 text-green-400" 
+                              : tx.status === "pending" 
+                                ? "bg-yellow-500/20 text-yellow-400" 
+                                : tx.status === "declined" || tx.status === "failed"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : "bg-muted/50 text-muted-foreground"
+                          }`}>
                             {tx.status}
                           </span>
                         </div>
