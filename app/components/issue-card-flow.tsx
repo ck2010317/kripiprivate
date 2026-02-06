@@ -534,7 +534,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
               ) : (
                 <>
                   <Wallet className="w-5 h-5 mr-2" />
-                  Continue to Payment - ${(parseFloat(topupAmount || "10") + CARD_ISSUANCE_FEE).toFixed(2)}
+                  Continue to Payment - ${(parseFloat(topupAmount || "10") + CARD_ISSUANCE_FEE + ((parseFloat(topupAmount || "10") * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT)).toFixed(2)}
                 </>
               )}
             </Button>
