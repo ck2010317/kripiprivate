@@ -181,15 +181,79 @@ export async function fundCard(request: FundCardRequest): Promise<FundCardRespon
 
   console.log("[KripiCard] Funding card", request.card_id, "with", request.amount, "USD")
   
-  // For now: mock funding since account has zero balance
-  const mockFunding = {
-    success: true,
-    new_balance: request.amount,
-    message: `Mock funding successful for ${request.amount} USD (Real API requires account funding)`
+  // Validate inputs
+  if (!request.card_id || request.card_id.trim().length === 0) {
+    throw new Error("card_id is required and cannot be empty")
   }
-  
-  console.log("[KripiCard] ✅ Mock funding successful:", request.card_id)
-  return mockFunding
+
+  if (!request.amount || request.amount <= 0) {
+    throw new Error(`Invalid amount: ${request.amount}. Amount must be greater than 0`)
+  }
+
+  try {
+    // Ensure amount is a number and round to 2 decimal places
+    const amount = Math.round(parseFloat(String(request.amount)) * 100) / 100
+    
+    const payload = {
+      api_key: API_KEY,
+      card_id: request.card_id.trim(),
+      amount: amount,
+    }
+    
+    console.log("[KripiCard] Fund payload:", JSON.stringify(payload, null, 2))
+    
+    const url = `${KRIPICARD_BASE_URL}/premium/Fund_Card`
+    console.log("[KripiCard] Calling Fund_Card endpoint:", url)
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+
+    console.log("[KripiCard] Fund response status:", response.status)
+    
+    const contentType = response.headers.get("content-type")
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await response.text()
+      console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
+      throw new Error(`API returned non-JSON (${response.status}): ${text.substring(0, 100)}`)
+    }
+
+    const data = await response.json()
+    console.log("[KripiCard] Fund response data:", JSON.stringify(data, null, 2))
+
+    if (!response.ok) {
+      const errorMsg = data.message || data.error || `HTTP ${response.status}`
+      console.error("[KripiCard] ❌ Fund API Error:", errorMsg)
+      throw new Error(`KripiCard Fund API Error (${response.status}): ${errorMsg}`)
+    }
+
+    if (!data.success) {
+      const errorMsg = data.message || data.error || "API returned success=false"
+      console.error("[KripiCard] ❌ Fund API returned success=false:", errorMsg)
+      throw new Error(`KripiCard Fund API Error: ${errorMsg}`)
+    }
+
+    // Parse the new balance from response
+    const responseData: FundCardResponse = {
+      success: data.success || true,
+      new_balance: data.new_balance !== undefined ? data.new_balance : request.amount,
+      message: data.message,
+    }
+
+    console.log("[KripiCard] ✅ Fund successful. New balance:", responseData.new_balance)
+    return responseData
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error"
+    console.error("[KripiCard] ❌ Fund Exception:", errorMsg)
+    if (error instanceof Error) {
+      console.error("[KripiCard] Stack:", error.stack)
+    }
+    throw error
+  }
 }
 
 // Get card details
