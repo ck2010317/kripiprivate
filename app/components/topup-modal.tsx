@@ -77,8 +77,8 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
   const handleCreatePayment = async () => {
     const inputAmount = parseFloat(amount)
 
-    if (isNaN(inputAmount) || inputAmount < MIN_TOPUP) {
-      setError(`Minimum top-up amount is $${MIN_TOPUP}`)
+    if (isNaN(inputAmount) || inputAmount < 1) {
+      setError("Amount must be at least $1")
       return
     }
 
@@ -268,7 +268,7 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
 
               <Button
                 onClick={handleCreatePayment}
-                disabled={loading || topupAmount < MIN_TOPUP}
+                disabled={loading || topupAmount < 1}
                 className="w-full py-6 bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 transition-all"
               >
                 {loading ? (
