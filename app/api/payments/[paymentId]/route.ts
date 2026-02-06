@@ -165,6 +165,11 @@ export async function POST(
       // Issue new card
       try {
         const cardAmount = topupAmount + 5 // topup + $5 fee
+        console.log(`[Card Creation] Payment ID: ${payment.id}`)
+        console.log(`[Card Creation] Payment topupAmount: ${payment.topupAmount}`)
+        console.log(`[Card Creation] Payment amountUsd: ${payment.amountUsd}`)
+        console.log(`[Card Creation] Calculated topupAmount: ${topupAmount}`)
+        console.log(`[Card Creation] Card amount to send: ${cardAmount}`)
         console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
         
         const kripiResponse = await createKripiCard({
