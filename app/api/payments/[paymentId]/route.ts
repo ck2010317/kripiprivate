@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { verifyPayment } from "@/lib/solana-payment"
-import { createCard as createKripiCard } from "@/lib/kripicard-client"
+import { createCard as createKripiCard, fundCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Verify payment and process card
