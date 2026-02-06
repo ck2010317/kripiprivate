@@ -17,7 +17,8 @@ import {
   DollarSign,
   LogOut,
   ArrowLeft,
-  Wallet
+  Wallet,
+  Clock,
 } from "lucide-react"
 import { useAuth } from "@/app/context/auth-context"
 
@@ -323,6 +324,12 @@ function FundCardModal({
   const [amount, setAmount] = useState("10")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [payment, setPayment] = useState<{ id: string; amountUsd: number; amountSol: number; solPrice: number; paymentWallet: string; expiresAt: string } | null>(null)
+  const [step, setStep] = useState<"input" | "payment" | "verifying">("input")
+  const [copied, setCopied] = useState<string | null>(null)
+  const [timeLeft, setTimeLeft] = useState<number>(0)
+  const [autoVerifying, setAutoVerifying] = useState(false)
+  const [verifyError, setVerifyError] = useState("")
 
   // Fee constants - IMPORTANT: These match the card issuance fees
   const CARD_ISSUANCE_FEE = 4.0 // Fixed card issuance fee (when creating new card)
@@ -334,6 +341,90 @@ function FundCardModal({
   const serviceFee = topupAmount > 0 ? topupAmount * SERVICE_FEE_PERCENT + SERVICE_FEE_FLAT : 0
   const totalToCharge = topupAmount + serviceFee
   const finalBalance = card.balance + topupAmount // Balance after topup (before fees)
+
+  // Countdown timer
+  useEffect(() => {
+    if (!payment?.expiresAt || step !== "payment") return
+
+    const updateTimer = () => {
+      const now = new Date().getTime()
+      const expiry = new Date(payment.expiresAt).getTime()
+      const diff = Math.max(0, Math.floor((expiry - now) / 1000))
+      setTimeLeft(diff)
+
+      if (diff === 0) {
+        setVerifyError("Payment has expired. Please create a new payment request.")
+        setStep("input")
+        setPayment(null)
+      }
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [payment?.expiresAt, step])
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(field)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const handleAutoVerifyPayment = async () => {
+    if (!payment) {
+      setVerifyError("Payment not found")
+      return
+    }
+
+    setAutoVerifying(true)
+    setVerifyError("")
+    setStep("verifying")
+
+    try {
+      // Check for payment automatically
+      const response = await fetch(`/api/payments/auto-verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: payment.id }),
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        setVerifyError(data.message || "Payment not detected. Please wait a moment and try again.")
+        setStep("payment")
+        setAutoVerifying(false)
+        return
+      }
+
+      // Payment verified! Now process the topup
+      const issueResponse = await fetch(`/api/payments/${payment.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txSignature: data.txSignature }),
+      })
+
+      const issueData = await issueResponse.json()
+
+      if (!issueResponse.ok) {
+        throw new Error(issueData.error || "Failed to process fund")
+      }
+
+      // Success! Close modal and refresh
+      onSuccess()
+    } catch (err) {
+      setVerifyError(err instanceof Error ? err.message : "Failed to complete payment")
+      setStep("payment")
+    } finally {
+      setAutoVerifying(false)
+    }
+  }
 
   const handleFund = async () => {
     const fundAmount = parseFloat(amount)
@@ -384,11 +475,9 @@ function FundCardModal({
         return
       }
 
-      // Step 3: Close modal and redirect to payment
-      onSuccess() // This will close modal and refresh
-      // TODO: Redirect to payment page with paymentData.payment.id
-      // For now, just show success
-      alert(`Payment request created. Amount to pay: $${data.fees.totalToCharge}`)
+      // Step 3: Show payment screen
+      setPayment(paymentData.payment)
+      setStep("payment")
     } catch (error) {
       console.error("[Fund Error]:", error)
       setError("Network error. Please try again.")
@@ -399,7 +488,7 @@ function FundCardModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={step === "input" ? onClose : undefined} />
       
       <Card className="relative z-10 w-full max-w-lg bg-card border-border/50 overflow-hidden">
         {/* Header */}
@@ -411,96 +500,194 @@ function FundCardModal({
         </div>
 
         {/* Error */}
-        {error && (
+        {(error || verifyError) && (
           <div className="mx-6 mt-6 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive">{error || verifyError}</p>
           </div>
         )}
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Amount Input */}
-          <div>
-            <label className="text-sm font-medium block mb-3">Amount (USD)</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-muted-foreground">$</span>
-              <input
-                type="number"
-                min="1"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="50"
-                className="w-full pl-8 pr-16 py-3 rounded-lg bg-input border border-primary/30 focus:border-primary outline-none text-lg font-semibold"
-              />
-              <button 
-                onClick={() => setAmount("50")}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+        {/* Content - Input Step */}
+        {step === "input" && (
+          <div className="p-6 space-y-6">
+            {/* Amount Input */}
+            <div>
+              <label className="text-sm font-medium block mb-3">Amount (USD)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="50"
+                  className="w-full pl-8 pr-16 py-3 rounded-lg bg-input border border-primary/30 focus:border-primary outline-none text-lg font-semibold"
+                />
+                <button 
+                  onClick={() => setAmount("50")}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+                >
+                  MAX
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Minimum $1 required for top-up</p>
+            </div>
+
+            {/* Fee Breakdown - Styled like the demo */}
+            <div className="space-y-3">
+              {/* Top-up Amount */}
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/30">
+                <p className="text-xs text-muted-foreground font-semibold mb-2">TOP-UP AMOUNT</p>
+                <div className="flex items-baseline justify-between">
+                  <p className="text-3xl font-bold text-primary">${topupAmount.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Funds added to card</p>
+                </div>
+              </div>
+
+              {/* Fixed Fee */}
+              <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
+                <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
+                <div className="flex items-baseline justify-between">
+                  <p className="text-3xl font-bold text-secondary">${serviceFee.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Variable</p>
+                </div>
+              </div>
+
+              {/* Total Amount */}
+              <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
+                <p className="text-xs text-muted-foreground font-semibold mb-2">TOTAL AMOUNT TO PAY</p>
+                <p className="text-4xl font-bold text-accent">${totalToCharge.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground mt-2">Topup + Fees</p>
+              </div>
+
+              {/* New Balance Info */}
+              <div className="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
+                <p className="text-xs text-muted-foreground mb-1">After top-up, your card balance will be:</p>
+                <p className="text-xl font-bold text-primary">${finalBalance.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-4">
+              <Button variant="outline" onClick={onClose} className="flex-1">
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleFund} 
+                disabled={loading || topupAmount < 1}
+                className="flex-1 bg-gradient-to-r from-primary to-secondary"
               >
-                MAX
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">Minimum $1 required for top-up</p>
-          </div>
-
-          {/* Fee Breakdown - Styled like the demo */}
-          <div className="space-y-3">
-            {/* Top-up Amount */}
-            <div className="p-4 rounded-lg bg-primary/5 border border-primary/30">
-              <p className="text-xs text-muted-foreground font-semibold mb-2">TOP-UP AMOUNT</p>
-              <div className="flex items-baseline justify-between">
-                <p className="text-3xl font-bold text-primary">${topupAmount.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Funds added to card</p>
-              </div>
-            </div>
-
-            {/* Fixed Fee */}
-            <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
-              <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
-              <div className="flex items-baseline justify-between">
-                <p className="text-3xl font-bold text-secondary">${serviceFee.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Variable</p>
-              </div>
-            </div>
-
-            {/* Total Amount */}
-            <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
-              <p className="text-xs text-muted-foreground font-semibold mb-2">TOTAL AMOUNT TO PAY</p>
-              <p className="text-4xl font-bold text-accent">${totalToCharge.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground mt-2">Topup + Fees</p>
-            </div>
-
-            {/* New Balance Info */}
-            <div className="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
-              <p className="text-xs text-muted-foreground mb-1">After top-up, your card balance will be:</p>
-              <p className="text-xl font-bold text-primary">${finalBalance.toFixed(2)}</p>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Continue to Payment - ${totalToCharge.toFixed(2)}
+                  </>
+                )}
+              </Button>
             </div>
           </div>
+        )}
 
-          {/* Buttons */}
-          <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleFund} 
-              disabled={loading || topupAmount < 1}
-              className="flex-1 bg-gradient-to-r from-primary to-secondary"
-            >
-              {loading ? (
+        {/* Content - Payment Step */}
+        {(step === "payment" || step === "verifying") && payment && (
+          <div className="p-6 space-y-6">
+            {/* Payment Details */}
+            <div className="space-y-4">
+              {/* Amount to Pay */}
+              <div className="p-4 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/30">
+                <p className="text-xs text-muted-foreground font-semibold mb-2">AMOUNT TO PAY</p>
+                <div className="flex items-baseline justify-between mb-3">
+                  <p className="text-4xl font-bold text-primary">${payment.amountUsd.toFixed(2)}</p>
+                  <p className="text-sm font-semibold text-secondary">{payment.amountSol.toFixed(4)} SOL</p>
+                </div>
+                <p className="text-xs text-muted-foreground">SOL Price: ${payment.solPrice.toFixed(2)}</p>
+              </div>
+
+              {/* Expiry Timer */}
+              {step === "payment" && (
+                <div className="p-3 rounded-lg bg-muted/30 border border-border/30 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Payment expires in:
+                  </span>
+                  <span className="font-mono font-bold text-primary">{formatTime(timeLeft)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Wallet Address */}
+            {step === "payment" && (
+              <>
+                <div>
+                  <p className="text-sm font-medium block mb-3">Send SOL to this address:</p>
+                  <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
+                    <code className="flex items-center gap-2 text-sm break-all font-mono">
+                      <span className="flex-1">{payment.paymentWallet}</span>
+                      <button
+                        onClick={() => copyToClipboard(payment.paymentWallet, "wallet")}
+                        className="p-2 rounded hover:bg-muted flex-shrink-0"
+                      >
+                        {copied === "wallet" ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </button>
+                    </code>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm text-blue-600">
+                  <p>Once you send the payment to the wallet address above, click the button below. We'll automatically check the Solana blockchain and verify your payment.</p>
+                </div>
+              </>
+            )}
+
+            {/* Verifying State */}
+            {step === "verifying" && (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-center text-muted-foreground">Verifying payment on the blockchain...</p>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-4">
+              {step === "payment" && (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Continue to Payment - ${totalToCharge.toFixed(2)}
+                  <Button variant="outline" onClick={onClose} className="flex-1">
+                    Back
+                  </Button>
+                  <Button 
+                    onClick={handleAutoVerifyPayment}
+                    disabled={autoVerifying || step === "verifying"}
+                    className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                  >
+                    {autoVerifying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "I've Sent the Payment"
+                    )}
+                  </Button>
                 </>
               )}
-            </Button>
+              {step === "verifying" && (
+                <Button disabled className="w-full" variant="outline">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Verifying...
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </Card>
     </div>
   )
