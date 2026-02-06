@@ -51,9 +51,6 @@ export async function GET(
       // API might be down or account needs funding - use local data
       console.warn("[Cards] Could not fetch from KripiCard API, using local data:", kripiError instanceof Error ? kripiError.message : "Unknown error")
     }
-      // Continue with cached data if API fails
-      console.warn("[Cards] Failed to fetch live card details, using cached data")
-    }
 
     return NextResponse.json({
       success: true,
