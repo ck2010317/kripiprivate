@@ -158,12 +158,12 @@ export async function POST(request: NextRequest) {
     if (payment.cardType === "issue") {
       console.log(`[Card Issuance] Creating card for ${payment.nameOnCard}`)
 
-      // Create card
+      // Create card with proper parameters
       const card = await createKripiCard({
-        name: payment.nameOnCard || "Virtual Card",
-        daily_limit: 1000,
-        monthly_limit: 30000,
-        cvv: Math.random().toString().slice(2, 5).padEnd(3, "0"),
+        amount: payment.amountSol,
+        bankBin: "49387520",
+        name_on_card: payment.nameOnCard || "Virtual Card",
+        email: user.email || "noemail@example.com",
       })
 
       if (!card) {
@@ -178,7 +178,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Fund the card with SOL
-      const fundResult = await fundCard(card.id, payment.amountSol)
+      const fundResult = await fundCard({
+        card_id: card.card_id,
+        amount: payment.amountSol,
+      })
 
       if (!fundResult) {
         await prisma.payment.update({
@@ -196,33 +199,31 @@ export async function POST(request: NextRequest) {
         where: { id: payment.id },
         data: { 
           status: "COMPLETED",
-          cardId: card.id,
+          cardId: card.card_id,
         },
       })
 
       // Create card record
       await prisma.card.create({
         data: {
-          kripiCardId: card.id,
+          kripiCardId: card.card_id,
           nameOnCard: payment.nameOnCard || "Virtual Card",
-          lastFourPan: card.last_four || "****",
-          expiryMonth: parseInt(card.expiry.split("/")[0]),
-          expiryYear: parseInt(card.expiry.split("/")[1]),
+          lastFourPan: card.card_number?.slice(-4) || "****",
+          expiryMonth: parseInt(card.expiry_date.split("/")[0]),
+          expiryYear: parseInt(card.expiry_date.split("/")[1]),
           userId: user.id,
         },
       })
 
-      console.log(`[Card Issuance] ✅ Card created: ${card.id}`)
+      console.log(`[Card Issuance] ✅ Card created: ${card.card_id}`)
 
       return NextResponse.json({
         success: true,
         message: "Card issued successfully!",
         card: {
-          id: card.id,
-          name: card.holder_name,
-          lastFour: card.last_four,
-          expiry: card.expiry,
-          pan: card.pan,
+          id: card.card_id,
+          number: card.card_number,
+          expiry: card.expiry_date,
           cvv: card.cvv,
         },
       })

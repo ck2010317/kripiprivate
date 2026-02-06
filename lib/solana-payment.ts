@@ -89,7 +89,7 @@ export async function verifyPayment(
     }
 
     const paymentWalletIndex = accountKeys.staticAccountKeys.findIndex(
-      (key) => key.toBase58() === paymentWallet.toBase58()
+      (key: any) => key.toBase58() === paymentWallet.toBase58()
     )
 
     if (paymentWalletIndex === -1) {
@@ -123,7 +123,7 @@ export async function verifyPayment(
     // Optionally verify sender if provided
     if (senderAddress) {
       const senderIndex = accountKeys.staticAccountKeys.findIndex(
-        (key) => key.toBase58() === senderAddress
+        (key: any) => key.toBase58() === senderAddress
       )
       if (senderIndex === -1) {
         return { verified: false, error: "Transaction not from expected sender" }
