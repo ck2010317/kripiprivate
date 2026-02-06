@@ -67,6 +67,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if ((cardType === "topup" || cardType === "fund") && !targetCardId && !cardId) {
+      return NextResponse.json(
+        { error: "Card ID is required for topup/fund operations" },
+        { status: 400 }
+      )
+    }
+
     // Get SOL conversion
     const { solAmount, solPrice } = await usdToSol(amountUsd)
 
@@ -113,8 +120,21 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[Payments] Create payment error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Failed to create payment request"
+    const errorDetails = error instanceof Error ? error.stack : JSON.stringify(error)
+    
+    console.error("[Payments] Error details:", {
+      message: errorMessage,
+      stack: errorDetails,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+    })
+    
     return NextResponse.json(
-      { error: "Failed to create payment request" },
+      { 
+        error: errorMessage,
+        details: errorDetails,
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     )
   }
