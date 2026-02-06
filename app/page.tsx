@@ -152,7 +152,7 @@ function AnimatedTerminal() {
 
 function HomeContent() {
   const { user, loading: authLoading } = useAuth()
-  const [activeTab, setActiveTab] = useState("landing")
+  const [activeTab, setActiveTab] = useState(user ? "dashboard" : "landing")
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
 
