@@ -326,32 +326,6 @@ export async function POST(
       // Use the actual topup amount for funding, not the total with fee
       const fundAmount = payment.topupAmount || payment.amountUsd
 
-      // CRITICAL: Validate minimum fund amount ($10 is KripiCard's minimum)
-      const KRIPICARD_MIN_FUND = 10
-      if (fundAmount < KRIPICARD_MIN_FUND) {
-        console.error("[Fund Card] ❌ Fund amount below minimum:", {
-          fundAmount,
-          minimum: KRIPICARD_MIN_FUND,
-          kripiCardId: card.kripiCardId,
-          paymentId: payment.id,
-        })
-        
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: "FAILED" },
-        })
-
-        return NextResponse.json(
-          { 
-            error: `Invalid fund amount. Minimum is $${KRIPICARD_MIN_FUND}`,
-            details: `The fund amount ($${fundAmount.toFixed(2)}) is below the minimum of $${KRIPICARD_MIN_FUND}`,
-            fundAmount,
-            minimum: KRIPICARD_MIN_FUND,
-          },
-          { status: 400 }
-        )
-      }
-      
       console.log(`[Fund Card] Starting fund process:`, {
         targetCardId: payment.targetCardId,
         dbCardId: card.id,

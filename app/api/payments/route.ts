@@ -33,18 +33,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate minimum amounts
-    const KRIPICARD_MIN_FUND = 10 // KripiCard minimum funding amount (only for actual funding)
-    
     if (!amountUsd || amountUsd < 1) {
       return NextResponse.json(
         { error: "Amount must be at least $1" },
         { status: 400 }
       )
     }
-
-    // NOTE: We accept payments >= $1, but KripiCard Fund API requires >= $10
-    // The $10 check happens later when actually funding the card
-    // Payment verification should work with any amount >= $1
 
     if (amountUsd > 10000) {
       return NextResponse.json(
