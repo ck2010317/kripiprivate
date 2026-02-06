@@ -420,16 +420,20 @@ export async function freezeUnfreezeCard(request: FreezeUnfreezeRequest): Promis
 }
 
 // Get card transactions from KripiCard
+// NOTE: KripiCard API does not have a dedicated transactions endpoint.
+// We use Get_CardDetails which may include transaction data, and also
+// log the full response so we can discover the actual data structure.
 export async function getCardTransactions(cardId: string): Promise<CardTransactionsResponse> {
   if (!API_KEY) {
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
   console.log("[KripiCard] Fetching transactions for card:", cardId)
+  console.log("[KripiCard] Using Get_CardDetails endpoint (no dedicated transactions endpoint)")
 
   try {
     const response = await fetch(
-      `${KRIPICARD_BASE_URL}/premium/Get_CardTransactions?api_key=${API_KEY}&card_id=${cardId}`,
+      `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${cardId}`,
       {
         method: "GET",
         headers: {
@@ -438,45 +442,88 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       }
     )
 
-    console.log("[KripiCard] Get transactions response status:", response.status)
+    console.log("[KripiCard] Get card details response status:", response.status)
 
-    let data
+    let data: Record<string, unknown>
     try {
       const contentType = response.headers.get("content-type")
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text()
-        console.error("[KripiCard] Non-JSON response:", text.substring(0, 200))
+        console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
         throw new Error(`Expected JSON response but got ${contentType}`)
       }
       data = await response.json()
     } catch (parseError) {
-      console.error("[KripiCard] Failed to parse transactions response:", parseError)
-      throw new Error(`Failed to parse card transactions: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+      console.error("[KripiCard] Failed to parse response:", parseError)
+      throw new Error(`Failed to parse card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
     }
 
-    console.log("[KripiCard] Transactions response:", JSON.stringify(data, null, 2))
+    // Log the FULL response so we can see all available fields
+    console.log("[KripiCard] ===== FULL Card Details Response =====")
+    console.log("[KripiCard] Response keys:", Object.keys(data))
+    console.log("[KripiCard] Full response:", JSON.stringify(data, null, 2))
+    console.log("[KripiCard] ===== END Response =====")
 
     if (!response.ok) {
-      throw new Error(data.message || `Failed to get card transactions (HTTP ${response.status})`)
+      throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
     }
 
-    // If the endpoint doesn't exist or returns success=false, return empty array
-    if (!data.success) {
-      console.warn("[KripiCard] Get transactions returned success=false, returning empty transactions")
-      return {
-        success: true,
-        transactions: [],
-        message: data.message,
+    // Search for transactions in every possible field name
+    const possibleTransactionFields = [
+      "transactions", "Transactions", "transaction", "Transaction",
+      "data", "Data", "records", "Records",
+      "history", "History", "card_transactions", "CardTransactions",
+      "activity", "Activity", "entries", "Entries",
+    ]
+
+    let rawTransactions: Record<string, unknown>[] = []
+    let foundField = ""
+
+    for (const field of possibleTransactionFields) {
+      if (data[field] && Array.isArray(data[field])) {
+        rawTransactions = data[field] as Record<string, unknown>[]
+        foundField = field
+        console.log(`[KripiCard] Found transactions in field "${field}":`, rawTransactions.length, "items")
+        break
       }
     }
 
-    // Normalize transaction data from KripiCard API
-    // The API may return fields with different names/formats than our interface expects
-    const rawTransactions = data.transactions || data.data || []
-    const normalizedTransactions: CardTransaction[] = rawTransactions.map((tx: Record<string, unknown>, index: number) => {
+    // Also check if there's a nested object that contains transactions
+    if (rawTransactions.length === 0) {
+      for (const key of Object.keys(data)) {
+        const val = data[key]
+        if (val && typeof val === "object" && !Array.isArray(val)) {
+          const nested = val as Record<string, unknown>
+          for (const field of possibleTransactionFields) {
+            if (nested[field] && Array.isArray(nested[field])) {
+              rawTransactions = nested[field] as Record<string, unknown>[]
+              foundField = `${key}.${field}`
+              console.log(`[KripiCard] Found transactions in nested field "${key}.${field}":`, rawTransactions.length, "items")
+              break
+            }
+          }
+          if (rawTransactions.length > 0) break
+        }
+      }
+    }
+
+    if (rawTransactions.length === 0) {
+      console.log("[KripiCard] No transaction array found in response. Available keys:", Object.keys(data))
+      console.log("[KripiCard] Checking if entire response might be the card object with no transactions support...")
+      return {
+        success: true,
+        transactions: [],
+        message: "KripiCard API does not return transaction history. Transactions are visible on the KripiCard dashboard.",
+      }
+    }
+
+    console.log(`[KripiCard] Raw transactions from "${foundField}":`, JSON.stringify(rawTransactions, null, 2))
+
+    // Normalize transaction data
+    const normalizedTransactions: CardTransaction[] = rawTransactions.map((tx, index) => {
       // Parse amount - handle formats like "$-10.15", "-10.15", or numeric values
       let amount = 0
-      const rawAmount = tx.amount ?? tx.Amount ?? tx.transaction_amount ?? 0
+      const rawAmount = tx.amount ?? tx.Amount ?? tx.transaction_amount ?? tx.value ?? tx.Value ?? 0
       if (typeof rawAmount === "string") {
         amount = Math.abs(parseFloat(rawAmount.replace(/[^\d.-]/g, "")) || 0)
       } else if (typeof rawAmount === "number") {
@@ -484,11 +531,11 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       }
 
       // Map KripiCard type to our normalized type
-      const rawType = String(tx.type ?? tx.Type ?? tx.transaction_type ?? "unknown").toLowerCase()
+      const rawType = String(tx.type ?? tx.Type ?? tx.transaction_type ?? tx.txn_type ?? "unknown").toLowerCase()
       let type = rawType
-      if (rawType === "consumption" || rawType === "purchase" || rawType === "pos") {
+      if (rawType === "consumption" || rawType === "purchase" || rawType === "pos" || rawType === "debit") {
         type = "purchase"
-      } else if (rawType === "refund" || rawType === "reversal") {
+      } else if (rawType === "refund" || rawType === "reversal" || rawType === "credit") {
         type = "refund"
       } else if (rawType === "cashback") {
         type = "cashback"
@@ -496,14 +543,16 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
         type = "charge"
       }
 
+      const merchant = String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? tx.merchantName ?? "")
+      
       return {
-        transaction_id: String(tx.transaction_id ?? tx.id ?? tx.txn_id ?? `tx-${index}`),
+        transaction_id: String(tx.transaction_id ?? tx.id ?? tx.txn_id ?? tx.reference ?? `tx-${index}`),
         card_id: String(tx.card_id ?? tx.cardId ?? cardId),
         type,
         amount,
-        merchant: String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? ""),
-        description: String(tx.description ?? tx.Description ?? tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? type),
-        date: String(tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? new Date().toISOString()),
+        merchant,
+        description: String(tx.description ?? tx.Description ?? tx.memo ?? tx.note ?? merchant || type),
+        date: String(tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? tx.timestamp ?? new Date().toISOString()),
         status: String(tx.status ?? tx.Status ?? "completed").toLowerCase(),
         currency: String(tx.currency ?? tx.Currency ?? "USD"),
       }
@@ -514,11 +563,10 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
     return {
       success: true,
       transactions: normalizedTransactions,
-      message: data.message,
+      message: data.message as string | undefined,
     }
   } catch (error) {
     console.error("[KripiCard] Exception fetching transactions:", error instanceof Error ? error.message : error)
-    // Return empty array on error instead of throwing
     return {
       success: true,
       transactions: [],

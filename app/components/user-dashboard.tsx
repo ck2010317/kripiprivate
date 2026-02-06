@@ -814,25 +814,32 @@ function TransactionHistoryModal({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState<"card" | "funding">("card")
+  const [apiMessage, setApiMessage] = useState("")
 
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
         setLoading(true)
         setError("")
+        setApiMessage("")
         // Fetch actual card transactions from KripiCard
         const response = await fetch(`/api/cards/${card.id}/card-transactions`)
         const data = await response.json()
 
+        console.log("[Dashboard] Card transactions response:", JSON.stringify(data, null, 2))
+
         if (!data.success) {
           console.warn("Failed to load card transactions:", data.error)
           setTransactions([])
+          setApiMessage(data.error || "Failed to load transactions")
         } else {
           setTransactions(data.transactions || [])
+          if (data.message) {
+            setApiMessage(data.message)
+          }
         }
       } catch (err) {
         console.error("Failed to fetch card transactions:", err)
-        // Don't set error - we'll show empty state instead
         setTransactions([])
       } finally {
         setLoading(false)
@@ -955,6 +962,9 @@ function TransactionHistoryModal({
                   <div className="text-center">
                     <p className="text-lg text-muted-foreground mb-2">💳 No card transactions yet</p>
                     <p className="text-sm text-muted-foreground">Purchases and refunds will appear here</p>
+                    {apiMessage && (
+                      <p className="text-xs text-muted-foreground mt-4 px-4 py-2 bg-muted/30 rounded-lg">{apiMessage}</p>
+                    )}
                   </div>
                 </div>
               ) : (
