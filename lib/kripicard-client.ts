@@ -149,8 +149,19 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
       throw new Error("KripiCard API returned success but missing card_id")
     }
 
-    console.log("[KripiCard] ✅ Card created:", data.card_id)
-    return data
+    // Ensure we have all required fields, with fallbacks
+    const responseData: CreateCardResponse = {
+      success: data.success || true,
+      card_id: data.card_id,
+      card_number: data.card_number || data.pan || "****",
+      expiry_date: data.expiry_date || data.expiry || "12/25",
+      cvv: data.cvv || data.cvc || "***",
+      balance: data.balance || request.amount,
+      message: data.message,
+    }
+
+    console.log("[KripiCard] ✅ Card created with response:", JSON.stringify(responseData, null, 2))
+    return responseData
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error"
     console.error("[KripiCard] ❌ Exception caught:", errorMsg)

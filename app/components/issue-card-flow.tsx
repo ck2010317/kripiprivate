@@ -45,7 +45,9 @@ interface IssueCardFlowProps {
 }
 
 // Fixed card issuance fee
-const CARD_ISSUANCE_FEE = 5
+const CARD_ISSUANCE_FEE = 4 // $4 card issuance fee
+const SERVICE_FEE_PERCENT = 0.02 // 2%
+const SERVICE_FEE_FLAT = 1 // $1
 
 // Token gate requirements
 const REQUIRED_TOKEN_AMOUNT = 1000
@@ -106,7 +108,9 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
       return
     }
 
-    const totalAmount = topup + CARD_ISSUANCE_FEE
+    // Calculate fees
+    const serviceFee = (topup * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT
+    const totalAmount = topup + CARD_ISSUANCE_FEE + serviceFee
     
     setLoading(true)
     setError("")
@@ -118,6 +122,8 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
         body: JSON.stringify({
           amountUsd: totalAmount,
           topupAmount: topup,
+          cardFee: CARD_ISSUANCE_FEE,
+          serviceFee: serviceFee,
           nameOnCard: nameOnCard.trim(),
           cardType: "issue",
         }),

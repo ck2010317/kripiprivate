@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { amountUsd, nameOnCard, cardType, targetCardId, topupAmount, topupFee } = await request.json()
+    const { amountUsd, nameOnCard, cardType, targetCardId, topupAmount, topupFee, cardFee, serviceFee } = await request.json()
 
     // Log what we're receiving
     console.log("[Payments] Creating payment with:", {
@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
       targetCardId,
       topupAmount,
       topupFee,
+      cardFee,
+      serviceFee,
     })
     if (!amountUsd || amountUsd < 5) {
       return NextResponse.json(

@@ -144,7 +144,8 @@ export async function POST(
 
     // Process based on card type
     if (payment.cardType === "issue") {
-      // For card issuance, use the amountUsd minus the $5 fee for topup
+      // For card issuance, use the topupAmount as the card balance
+      // The total we charged includes fees, but the card itself gets only the topup amount
       const topupAmount = payment.topupAmount || (payment.amountUsd - 5) || 10
       
       console.log(`[Card Creation] Starting card creation process`)
@@ -170,8 +171,10 @@ export async function POST(
 
       // Issue new card
       try {
-        const cardAmount = topupAmount + 5 // topup + $5 fee
-        console.log(`[Card Creation] Card amount to send: ${cardAmount}`)
+        // IMPORTANT: Only send the topup amount to KripiCard, not the fees
+        // The card balance should be the topup amount the user requested
+        const cardAmount = topupAmount
+        console.log(`[Card Creation] Card amount to send to Kripi: ${cardAmount}`)
         console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
         
         // Prepare card creation parameters
@@ -181,7 +184,7 @@ export async function POST(
         console.log(`[Card Creation] Parameters:`)
         console.log(`  - Name: ${cardName}`)
         console.log(`  - Email: ${cardEmail}`)
-        console.log(`  - Amount: ${cardAmount}`)
+        console.log(`  - Amount (topup only, no fees): ${cardAmount}`)
         console.log(`  - User ID: ${user.id}`)
         
         console.log(`[Card Creation] About to call createKripiCard with:`, {
@@ -198,23 +201,41 @@ export async function POST(
           bankBin: "49387520",
         })
 
+        console.log(`[Card Creation] Received KripiCard response:`, JSON.stringify(kripiResponse, null, 2))
+
         if (!kripiResponse || !kripiResponse.card_id) {
+          console.error(`[Card Creation] Invalid response - missing card_id. Response:`, kripiResponse)
           throw new Error("KripiCard API returned invalid response - missing card_id")
         }
 
-        console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id} with balance $${kripiResponse.balance}`)
+        console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id}`)
+        console.log(`[Card Creation] Card details from Kripi:`, {
+          card_id: kripiResponse.card_id,
+          card_number: kripiResponse.card_number,
+          expiry_date: kripiResponse.expiry_date,
+          cvv: kripiResponse.cvv,
+          balance: kripiResponse.balance,
+        })
 
         // Store card in database
+        console.log(`[Card Creation] Storing card in database...`)
         const card = await prisma.card.create({
           data: {
             kripiCardId: kripiResponse.card_id,
             cardNumber: kripiResponse.card_number || "****",
             expiryDate: kripiResponse.expiry_date || "12/25",
             cvv: kripiResponse.cvv || "***",
-            nameOnCard: (payment.nameOnCard || user.name).toUpperCase(),
+            nameOnCard: cardName,
             balance: kripiResponse.balance || cardAmount,
             userId: user.id,
           },
+        })
+
+        console.log(`[Card Creation] ✅ Card stored in database:`, {
+          id: card.id,
+          kripiCardId: card.kripiCardId,
+          balance: card.balance,
+          status: card.status,
         })
 
         // Update payment as completed
