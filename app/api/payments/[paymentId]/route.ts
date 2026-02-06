@@ -321,6 +321,24 @@ export async function POST(
         data: { balance: fundResponse.new_balance },
       })
 
+      // Log transaction
+      await prisma.cardTransaction.create({
+        data: {
+          cardId: card.id,
+          type: "FUND",
+          amount: fundAmount,
+          description: `Card funded via Solana payment (${fundAmount.toFixed(2)})`,
+          status: "COMPLETED",
+          externalTxId: txSignature,
+          metadata: JSON.stringify({
+            paymentId: payment.id,
+            previousBalance: card.balance,
+            newBalance: fundResponse.new_balance,
+            serviceFee: payment.topupFee,
+          }),
+        },
+      })
+
       // Update payment as completed
       await prisma.payment.update({
         where: { id: payment.id },

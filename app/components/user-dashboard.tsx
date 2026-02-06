@@ -48,6 +48,8 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
   const [showFullNumber, setShowFullNumber] = useState<Record<string, boolean>>({})
   const [copied, setCopied] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
+  const [selectedCardForHistory, setSelectedCardForHistory] = useState<CardData | null>(null)
 
   const fetchCards = useCallback(async () => {
     try {
@@ -87,6 +89,17 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
   useEffect(() => {
     fetchCards()
   }, [fetchCards])
+
+  // Auto-refresh cards every 30 seconds if enabled
+  useEffect(() => {
+    if (!autoRefreshEnabled) return
+
+    const interval = setInterval(() => {
+      fetchCards()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [autoRefreshEnabled, fetchCards])
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text)
@@ -148,6 +161,15 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Button 
+              variant={autoRefreshEnabled ? "default" : "outline"}
+              size="sm" 
+              onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+              title={autoRefreshEnabled ? "Auto-refresh every 30 seconds" : "Auto-refresh disabled"}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              {autoRefreshEnabled ? "Auto-refresh ON" : "Auto-refresh OFF"}
+            </Button>
             <Button variant="outline" size="sm" onClick={fetchCards} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -292,6 +314,14 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
                     )}
                   </Button>
                   <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedCardForHistory(card)}
+                    title="View transaction history"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                  </Button>
+                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleCardAction(card.id, card.status === "FROZEN" ? "unfreeze" : "freeze")}
@@ -300,24 +330,22 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
                     {actionLoading === card.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : card.status === "FROZEN" ? (
-                      <>
-                        <Play className="w-4 h-4 mr-1" />
-                        Unfreeze
-                      </>
+                      <Play className="w-4 h-4" />
                     ) : (
-                      <>
-                        <Snowflake className="w-4 h-4 mr-1" />
-                        Freeze
-                      </>
+                      <Snowflake className="w-4 h-4" />
                     )}
                   </Button>
+                </div>
+                
+                {/* Fund Button - Full Width */}
+                <div className="p-4 border-t border-border/50">
                   <Button
-                    variant="outline"
-                    size="sm"
                     onClick={() => setSelectedCard(card)}
+                    className="w-full bg-gradient-to-r from-primary to-secondary"
+                    size="sm"
                   >
-                    <DollarSign className="w-4 h-4 mr-1" />
-                    Fund
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Fund Card
                   </Button>
                 </div>
               </Card>
@@ -335,6 +363,14 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
             setSelectedCard(null)
             fetchCards()
           }}
+        />
+      )}
+
+      {/* Transaction History Modal */}
+      {selectedCardForHistory && (
+        <TransactionHistoryModal
+          card={selectedCardForHistory}
+          onClose={() => setSelectedCardForHistory(null)}
         />
       )}
     </div>
@@ -355,11 +391,12 @@ function FundCardModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [payment, setPayment] = useState<{ id: string; amountUsd: number; amountSol: number; solPrice: number; paymentWallet: string; expiresAt: string } | null>(null)
-  const [step, setStep] = useState<"input" | "payment" | "verifying">("input")
+  const [step, setStep] = useState<"input" | "payment" | "verifying" | "success">("input")
   const [copied, setCopied] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const [autoVerifying, setAutoVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
 
   // Fee constants - IMPORTANT: These match the card issuance fees
   const CARD_ISSUANCE_FEE = 4.0 // Fixed card issuance fee (when creating new card)
@@ -425,6 +462,7 @@ function FundCardModal({
       })
 
       const data = await response.json()
+      console.log("[Fund] Auto-verify response:", data)
 
       if (!data.success) {
         setVerifyError(data.message || "Payment not detected. Please wait a moment and try again.")
@@ -441,14 +479,27 @@ function FundCardModal({
       })
 
       const issueData = await issueResponse.json()
+      console.log("[Fund] Verification response:", issueData, "Status:", issueResponse.status)
 
       if (!issueResponse.ok) {
+        console.error("[Fund] Verification failed:", issueData)
         throw new Error(issueData.error || "Failed to process fund")
       }
 
-      // Success! Close modal and refresh
-      onSuccess()
+      if (!issueData.success) {
+        throw new Error(issueData.message || "Failed to process fund")
+      }
+
+      // Success! Show success message then close
+      setSuccessMessage(`Card funded successfully! New balance: $${issueData.newBalance?.toFixed(2) || (card.balance + parseFloat(amount)).toFixed(2)}`)
+      setStep("success")
+      
+      // Close modal and refresh after 2 seconds
+      setTimeout(() => {
+        onSuccess()
+      }, 2000)
     } catch (err) {
+      console.error("[Fund] Error:", err)
       setVerifyError(err instanceof Error ? err.message : "Failed to complete payment")
       setStep("payment")
     } finally {
@@ -718,6 +769,251 @@ function FundCardModal({
             </div>
           </div>
         )}
+
+        {/* Content - Success Step */}
+        {step === "success" && (
+          <div className="p-6 text-center space-y-6">
+            <div className="flex justify-center">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+                <Check className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-green-500 mb-2">Success!</h3>
+              <p className="text-muted-foreground">{successMessage}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Closing modal...</p>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// Transaction History Modal
+interface CardTransaction {
+  transaction_id: string
+  card_id: string
+  type: string
+  amount: number
+  merchant?: string
+  description: string
+  date: string
+  status: string
+  currency?: string
+}
+
+function TransactionHistoryModal({ 
+  card, 
+  onClose
+}: { 
+  card: CardData
+  onClose: () => void
+}) {
+  const [transactions, setTransactions] = useState<CardTransaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [activeTab, setActiveTab] = useState<"card" | "funding">("card")
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true)
+        setError("")
+        // Fetch actual card transactions from KripiCard
+        const response = await fetch(`/api/cards/${card.id}/card-transactions`)
+        const data = await response.json()
+
+        if (!data.success) {
+          console.warn("Failed to load card transactions:", data.error)
+          setTransactions([])
+        } else {
+          setTransactions(data.transactions || [])
+        }
+      } catch (err) {
+        console.error("Failed to fetch card transactions:", err)
+        // Don't set error - we'll show empty state instead
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (activeTab === "card") {
+      fetchTransactions()
+    }
+  }, [card.id, activeTab])
+
+  const getTransactionIcon = (type: Transaction["type"]) => {
+    switch (type) {
+      case "FUND":
+        return "💚"
+      case "SPEND":
+        return "❌"
+      case "FREEZE":
+        return "❄️"
+      case "UNFREEZE":
+        return "▶️"
+      case "REFUND":
+        return "↩️"
+      case "BALANCE_SYNC":
+        return "🔄"
+      default:
+        return "•"
+    }
+  }
+
+  const getTransactionColor = (type: Transaction["type"]) => {
+    switch (type) {
+      case "FUND":
+        return "text-green-500"
+      case "SPEND":
+        return "text-red-500"
+      case "FREEZE":
+        return "text-blue-500"
+      case "UNFREEZE":
+        return "text-blue-400"
+      case "REFUND":
+        return "text-yellow-500"
+      case "BALANCE_SYNC":
+        return "text-purple-500"
+      default:
+        return "text-muted-foreground"
+    }
+  }
+
+  const formatRelativeTime = (date: string) => {
+    const now = new Date()
+    const then = new Date(date)
+    const diff = now.getTime() - then.getTime()
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (seconds < 60) return "just now"
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
+    
+    return then.toLocaleDateString()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      
+      <Card className="relative z-10 w-full max-w-2xl bg-card border-border/50 overflow-hidden max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-border/50 flex items-center justify-between">
+          <div>
+            <h3 className="text-2xl font-bold">Transaction History</h3>
+            <p className="text-muted-foreground mt-1">
+              Card ending in <span className="text-primary font-semibold">{card.cardNumber.slice(-4)}</span>
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            ✕
+          </Button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 px-6 pt-6 border-b border-border/50">
+          <button
+            onClick={() => setActiveTab("card")}
+            className={`pb-3 px-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === "card"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Card Transactions
+          </button>
+          <button
+            onClick={() => setActiveTab("funding")}
+            className={`pb-3 px-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === "funding"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Funding History
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "card" ? (
+            // Card Transactions Tab
+            <>
+              {loading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="text-center">
+                    <p className="text-lg text-muted-foreground mb-2">💳 No card transactions yet</p>
+                    <p className="text-sm text-muted-foreground">Purchases and refunds will appear here</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {transactions.map((tx) => (
+                    <div key={tx.transaction_id} className="p-6 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        {/* Left: Icon & Description */}
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <span className="text-2xl flex-shrink-0">
+                            {tx.type === "purchase" || tx.type === "charge" ? "🛒" : 
+                             tx.type === "refund" ? "↩️" :
+                             tx.type === "cashback" ? "💰" : "💳"}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium break-words">{tx.description || tx.type}</p>
+                            {tx.merchant && (
+                              <p className="text-sm text-muted-foreground mt-1">{tx.merchant}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {new Date(tx.date).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Right: Amount & Status */}
+                        <div className="flex flex-col items-end flex-shrink-0">
+                          <p className={`text-lg font-bold ${
+                            tx.type === "refund" ? "text-green-500" : "text-red-500"
+                          }`}>
+                            {tx.type === "refund" ? "+" : "-"}${tx.amount.toFixed(2)}
+                          </p>
+                          <span className="inline-block mt-2 px-2 py-1 text-xs rounded-full bg-muted/50 text-muted-foreground capitalize">
+                            {tx.status}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            // Funding History Tab (Future - will show funding transactions)
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <p className="text-lg text-muted-foreground mb-2">💚 Funding History</p>
+                <p className="text-sm text-muted-foreground">Fund transactions will appear here</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-border/50 flex justify-end">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       </Card>
     </div>
   )

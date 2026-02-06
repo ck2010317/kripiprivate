@@ -52,6 +52,24 @@ export interface FreezeUnfreezeResponse {
   message?: string
 }
 
+export interface CardTransaction {
+  transaction_id: string
+  card_id: string
+  type: string // "purchase", "refund", "charge", etc.
+  amount: number
+  merchant?: string
+  description: string
+  date: string
+  status: string
+  currency?: string
+}
+
+export interface CardTransactionsResponse {
+  success: boolean
+  transactions: CardTransaction[]
+  message?: string
+}
+
 // Create a new virtual card
 export async function createCard(request: CreateCardRequest): Promise<CreateCardResponse> {
   if (!API_KEY) {
@@ -317,4 +335,71 @@ export async function freezeUnfreezeCard(request: FreezeUnfreezeRequest): Promis
   }
 
   return data
+}
+
+// Get card transactions from KripiCard
+export async function getCardTransactions(cardId: string): Promise<CardTransactionsResponse> {
+  if (!API_KEY) {
+    throw new Error("KRIPICARD_API_KEY is not configured")
+  }
+
+  console.log("[KripiCard] Fetching transactions for card:", cardId)
+
+  try {
+    const response = await fetch(
+      `${KRIPICARD_BASE_URL}/premium/Get_CardTransactions?api_key=${API_KEY}&card_id=${cardId}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    )
+
+    console.log("[KripiCard] Get transactions response status:", response.status)
+
+    let data
+    try {
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text()
+        console.error("[KripiCard] Non-JSON response:", text.substring(0, 200))
+        throw new Error(`Expected JSON response but got ${contentType}`)
+      }
+      data = await response.json()
+    } catch (parseError) {
+      console.error("[KripiCard] Failed to parse transactions response:", parseError)
+      throw new Error(`Failed to parse card transactions: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+    }
+
+    console.log("[KripiCard] Transactions response:", JSON.stringify(data, null, 2))
+
+    if (!response.ok) {
+      throw new Error(data.message || `Failed to get card transactions (HTTP ${response.status})`)
+    }
+
+    // If the endpoint doesn't exist or returns success=false, return empty array
+    if (!data.success) {
+      console.warn("[KripiCard] Get transactions returned success=false, returning empty transactions")
+      return {
+        success: true,
+        transactions: [],
+        message: data.message,
+      }
+    }
+
+    return {
+      success: true,
+      transactions: data.transactions || [],
+      message: data.message,
+    }
+  } catch (error) {
+    console.error("[KripiCard] Exception fetching transactions:", error instanceof Error ? error.message : error)
+    // Return empty array on error instead of throwing
+    return {
+      success: true,
+      transactions: [],
+      message: error instanceof Error ? error.message : "Failed to fetch transactions",
+    }
+  }
 }

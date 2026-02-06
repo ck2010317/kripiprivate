@@ -42,6 +42,9 @@ model Card {
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  // Relations
+  transactions    CardTransaction[]
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -113,3 +116,41 @@ enum PaymentStatus {
   EXPIRED     // Payment window expired
   FAILED      // Payment failed
 }
+
+model CardTransaction {
+  id              String   @id @default(cuid())
+  
+  // Transaction details
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // Transaction info
+  type            TransactionType  // FUND, SPEND, FREEZE, UNFREEZE, etc
+  amount          Float
+  description     String   @default("")
+  
+  // Transaction status
+  status          String   @default("COMPLETED")  // COMPLETED, PENDING, FAILED
+  
+  // External transaction ID (from KripiCard if applicable)
+  externalTxId    String?
+  
+  // Metadata
+  metadata        String?  // JSON string for additional data
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cardId])
+  @@index([createdAt])
+}
+
+enum TransactionType {
+  FUND      // Added funds via Solana payment
+  SPEND     // Card was used to make a purchase
+  FREEZE    // Card was frozen
+  UNFREEZE  // Card was unfrozen
+  REFUND    // Transaction refund
+  BALANCE_SYNC  // Balance synced from KripiCard
+}
+
