@@ -70,13 +70,20 @@ export async function POST(request: NextRequest) {
     let matchedPayment = null
     for (const recentPayment of recentPayments) {
       // For card issuance: accept any payment >= $5 equivalent (roughly 0.05 SOL at $100/SOL)
-      // For other payments: match within 80-120% of expected amount
+      // For topup/fund: use looser matching with 70-130% tolerance for small amounts
       let amountMatch = false
       
       if (payment.cardType === "issue") {
         // Card issuance - just need at least ~$5 worth of SOL (0.05 SOL minimum)
         amountMatch = recentPayment.amount >= 0.045 && recentPayment.amount <= 1.0 // Max 1 SOL for card
         console.log(`[Auto Verify] Card issuance - checking if ${recentPayment.amount} SOL is in range [0.045, 1.0]: ${amountMatch}`)
+      } else if (payment.cardType === "topup" || payment.cardType === "fund") {
+        // Topup/fund - use looser matching because small amounts have more variance in SOL conversion
+        // Allow 70-130% tolerance for small amounts (< 0.05 SOL), stricter 80-120% for larger
+        const minAmount = payment.amountSol < 0.05 ? payment.amountSol * 0.70 : payment.amountSol * 0.80
+        const maxAmount = payment.amountSol < 0.05 ? payment.amountSol * 1.30 : payment.amountSol * 1.20
+        amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
+        console.log(`[Auto Verify] Topup/Fund - checking if ${recentPayment.amount} SOL is in range [${minAmount}, ${maxAmount}] (amountSol=${payment.amountSol}): ${amountMatch}`)
       } else {
         // Other payment types - stricter matching
         const minAmount = payment.amountSol * 0.80
