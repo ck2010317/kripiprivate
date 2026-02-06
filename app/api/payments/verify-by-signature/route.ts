@@ -166,13 +166,13 @@ export async function POST(request: NextRequest) {
         email: user.email || "noemail@example.com",
       })
 
-      if (!card) {
+      if (!card || !card.card_id) {
         await prisma.payment.update({
           where: { id: payment.id },
           data: { status: "FAILED" },
         })
         return NextResponse.json(
-          { error: "Failed to create card" },
+          { error: "Failed to create card - invalid API response" },
           { status: 500 }
         )
       }
@@ -190,6 +190,9 @@ export async function POST(request: NextRequest) {
       await prisma.card.create({
         data: {
           kripiCardId: card.card_id,
+          cardNumber: card.card_number || "****",
+          expiryDate: card.expiry_date || "12/25",
+          cvv: card.cvv || "***",
           nameOnCard: payment.nameOnCard || "Virtual Card",
           lastFourPan: card.card_number?.slice(-4) || "****",
           expiryMonth: parseInt(card.expiry_date.split("/")[0]),

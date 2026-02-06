@@ -174,17 +174,21 @@ export async function POST(
           bankBin: "49387520",
         })
 
+        if (!kripiResponse || !kripiResponse.card_id) {
+          throw new Error("KripiCard API returned invalid response - missing card_id")
+        }
+
         console.log(`[Card Creation] ✅ Card created: ${kripiResponse.card_id} with balance $${kripiResponse.balance}`)
 
         // Store card in database
         const card = await prisma.card.create({
           data: {
             kripiCardId: kripiResponse.card_id,
-            cardNumber: kripiResponse.card_number,
-            expiryDate: kripiResponse.expiry_date,
-            cvv: kripiResponse.cvv,
+            cardNumber: kripiResponse.card_number || "****",
+            expiryDate: kripiResponse.expiry_date || "12/25",
+            cvv: kripiResponse.cvv || "***",
             nameOnCard: (payment.nameOnCard || user.name).toUpperCase(),
-            balance: kripiResponse.balance,
+            balance: kripiResponse.balance || cardAmount,
             userId: user.id,
           },
         })
