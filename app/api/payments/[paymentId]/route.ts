@@ -343,39 +343,17 @@ export async function POST(
         console.error("[Card Creation] Full error object:", JSON.stringify(cardError, null, 2))
         
         const errorMessage = cardError instanceof Error ? cardError.message : JSON.stringify(cardError)
-        const errorLower = errorMessage.toLowerCase()
-        
-        // Detect KripiCard-specific errors and return user-friendly messages
-        let userFacingError = "Failed to create card"
-        let statusCode = 500
-        
-        if (errorLower.includes("insufficient") || errorLower.includes("balance") || errorLower.includes("funds")) {
-          userFacingError = "Insufficient balance on card provider. Please contact support or try a smaller amount."
-          statusCode = 400
-        } else if (errorLower.includes("minimum") || errorLower.includes("$10")) {
-          userFacingError = "Card amount is below the minimum. The minimum card amount is $10."
-          statusCode = 400
-        } else if (errorLower.includes("redirect") || errorLower.includes("html") || errorLower.includes("doctype")) {
-          userFacingError = "Card provider rejected the request. Please try again or contact support."
-          statusCode = 400
-        } else if (errorLower.includes("api key") || errorLower.includes("unauthorized") || errorLower.includes("401")) {
-          userFacingError = "Card provider authentication error. Please contact support."
-          statusCode = 503
-        }
         
         await prisma.payment.update({
           where: { id: payment.id },
           data: { status: "FAILED" },
         })
         
-        const errorResponse = {
-          error: userFacingError,
-          details: errorMessage,
-          timestamp: new Date().toISOString(),
-        }
-        
-        console.error("[Card Creation] Returning error response:", errorResponse)
-        return NextResponse.json(errorResponse, { status: statusCode })
+        // Pass through the raw error from KripiCard so we can debug real issues
+        return NextResponse.json(
+          { error: errorMessage, timestamp: new Date().toISOString() },
+          { status: 400 }
+        )
       }
     } else if ((payment.cardType === "topup" || payment.cardType === "fund") && payment.targetCardId) {
       // Fund existing card with the actual topup amount (not including fee)
