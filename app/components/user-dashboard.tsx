@@ -346,6 +346,7 @@ function FundCardModal({
     setError("")
 
     try {
+      // Step 1: Calculate fees and get payment request
       const response = await fetch(`/api/cards/${card.id}/fund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -354,13 +355,42 @@ function FundCardModal({
 
       const data = await response.json()
 
-      if (data.success) {
-        // TODO: This should redirect to payment verification after Solana payment
-        onSuccess()
-      } else {
-        setError(data.error || "Failed to fund card")
+      if (!data.success) {
+        setError(data.error || "Failed to process fund request")
+        setLoading(false)
+        return
       }
-    } catch {
+
+      // Step 2: Create payment request for Solana transaction
+      const paymentResponse = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amountUsd: data.fees.totalToCharge,
+          topupAmount: fundAmount,
+          cardFee: 0, // No card issuance fee for topup
+          serviceFee: data.fees.serviceFee,
+          nameOnCard: card.nameOnCard,
+          cardType: "fund", // Mark as fund, not issue
+          cardId: card.id, // Include card ID for fund operation
+        }),
+      })
+
+      const paymentData = await paymentResponse.json()
+
+      if (!paymentData.success || !paymentData.payment?.id) {
+        setError("Failed to create payment request")
+        setLoading(false)
+        return
+      }
+
+      // Step 3: Close modal and redirect to payment
+      onSuccess() // This will close modal and refresh
+      // TODO: Redirect to payment page with paymentData.payment.id
+      // For now, just show success
+      alert(`Payment request created. Amount to pay: $${data.fees.totalToCharge}`)
+    } catch (error) {
+      console.error("[Fund Error]:", error)
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)

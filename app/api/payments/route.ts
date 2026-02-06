@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { amountUsd, nameOnCard, cardType, targetCardId, topupAmount, topupFee, cardFee, serviceFee } = await request.json()
+    const { amountUsd, nameOnCard, cardType, targetCardId, cardId, topupAmount, topupFee, cardFee, serviceFee } = await request.json()
 
     // Log what we're receiving
     console.log("[Payments] Creating payment with:", {
@@ -25,14 +25,15 @@ export async function POST(request: NextRequest) {
       nameOnCard,
       cardType,
       targetCardId,
+      cardId,
       topupAmount,
       topupFee,
       cardFee,
       serviceFee,
     })
-    if (!amountUsd || amountUsd < 5) {
+    if (!amountUsd || amountUsd < 1) {
       return NextResponse.json(
-        { error: "Amount must be at least $5" },
+        { error: "Amount must be at least $1" },
         { status: 400 }
       )
     }
@@ -51,11 +52,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (cardType === "fund" && !cardId) {
+      return NextResponse.json(
+        { error: "Card ID is required for fund operations" },
+        { status: 400 }
+      )
+    }
+
     // Get SOL conversion
     const { solAmount, solPrice } = await usdToSol(amountUsd)
 
     // Create payment record (expires in 30 minutes)
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+
+    // For fund operations, map cardId to targetCardId
+    const finalTargetCardId = cardId || targetCardId
 
     const payment = await prisma.payment.create({
       data: {
@@ -64,9 +75,9 @@ export async function POST(request: NextRequest) {
         solPriceAtTime: solPrice,
         cardType: cardType || "issue",
         nameOnCard,
-        targetCardId,
+        targetCardId: finalTargetCardId,
         topupAmount,
-        topupFee,
+        topupFee: serviceFee || cardFee,
         userId: user.id,
         expiresAt,
       },
