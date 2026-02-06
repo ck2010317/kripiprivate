@@ -244,13 +244,47 @@ export async function fundCard(request: FundCardRequest): Promise<FundCardRespon
     console.log("[KripiCard] Fund response data:", JSON.stringify(data, null, 2))
 
     if (!response.ok) {
-      const errorMsg = data.message || data.error || `HTTP ${response.status}`
+      let errorMsg = data.message || data.error || `HTTP ${response.status}`
+      
+      // Extract specific validation errors from KripiCard
+      if (data.errors && typeof data.errors === "object") {
+        const errorDetails = Object.entries(data.errors)
+          .map(([field, messages]: [string, any]) => {
+            if (Array.isArray(messages)) {
+              return messages.join(", ")
+            }
+            return String(messages)
+          })
+          .join("; ")
+        
+        if (errorDetails) {
+          errorMsg = `${errorMsg} - ${errorDetails}`
+        }
+      }
+      
       console.error("[KripiCard] ❌ Fund API Error:", errorMsg)
       throw new Error(`KripiCard Fund API Error (${response.status}): ${errorMsg}`)
     }
 
     if (!data.success) {
-      const errorMsg = data.message || data.error || "API returned success=false"
+      let errorMsg = data.message || data.error || "API returned success=false"
+      
+      // Extract specific validation errors from KripiCard
+      if (data.errors && typeof data.errors === "object") {
+        const errorDetails = Object.entries(data.errors)
+          .map(([field, messages]: [string, any]) => {
+            if (Array.isArray(messages)) {
+              return messages.join(", ")
+            }
+            return String(messages)
+          })
+          .join("; ")
+        
+        if (errorDetails) {
+          errorMsg = `${errorMsg} - ${errorDetails}`
+        }
+      }
+      
       console.error("[KripiCard] ❌ Fund API returned success=false:", errorMsg)
       throw new Error(`KripiCard Fund API Error: ${errorMsg}`)
     }
