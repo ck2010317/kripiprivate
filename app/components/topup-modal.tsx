@@ -7,7 +7,7 @@ import { Loader2, Wallet, Clock, X, Check, Copy } from "lucide-react"
 
 const TOPUP_FEE_PERCENT = 0.025 // 2.5%
 const TOPUP_FEE_FLAT = 1 // $1
-const MIN_TOPUP = 1 // $1 minimum - testing KripiCard's actual limit
+const MIN_TOPUP = 10 // $10 minimum - KripiCard requirement
 
 interface TopupModalProps {
   cardId: string

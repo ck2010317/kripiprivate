@@ -33,9 +33,23 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate minimum amounts
+    const KRIPICARD_MIN_FUND = 10 // KripiCard minimum funding amount
+    
     if (!amountUsd || amountUsd < 1) {
       return NextResponse.json(
         { error: "Amount must be at least $1" },
+        { status: 400 }
+      )
+    }
+
+    // For topup/fund operations, enforce KripiCard's $10 minimum
+    if ((cardType === "topup" || cardType === "fund") && amountUsd < KRIPICARD_MIN_FUND) {
+      return NextResponse.json(
+        { 
+          error: `Invalid topup amount. Minimum is $${KRIPICARD_MIN_FUND}`,
+          details: `Topup amount ($${amountUsd.toFixed(2)}) must be at least $${KRIPICARD_MIN_FUND}`,
+          minimum: KRIPICARD_MIN_FUND,
+        },
         { status: 400 }
       )
     }
