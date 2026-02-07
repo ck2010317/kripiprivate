@@ -46,7 +46,7 @@ interface IssueCardFlowProps {
 
 // Fixed card issuance fee
 const CARD_ISSUANCE_FEE = 30 // $30 card issuance fee
-const SERVICE_FEE_PERCENT = 0.02 // 2%
+const SERVICE_FEE_PERCENT = 0.03 // 3%
 const SERVICE_FEE_FLAT = 1 // $1
 
 // Token gate requirements
@@ -516,7 +516,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
 
             {/* Service Fee - Dynamic */}
             <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
-              <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
+              <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (3% + $1)</p>
               <div className="flex items-baseline justify-between">
                 <p className="text-3xl font-bold text-secondary">${((parseFloat(topupAmount || "10") * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT).toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground">Variable</p>

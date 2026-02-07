@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 // Constants for fund fees (same as card issuance)
 const FIXED_FEE = 1.0 // $1.00 fixed fee
-const SERVICE_FEE_PERCENT = 0.02 // 2%
+const SERVICE_FEE_PERCENT = 0.03 // 3%
 
 export async function POST(
   req: NextRequest,
@@ -39,7 +39,7 @@ export async function POST(
 
     console.log(`[Fund Card] Card ID: ${cardId}`)
     console.log(`[Fund Card] Top-up amount: $${amount}`)
-    console.log(`[Fund Card] Service fee (2% + $1): $${serviceFee.toFixed(2)}`)
+    console.log(`[Fund Card] Service fee (3% + $1): $${serviceFee.toFixed(2)}`)
     console.log(`[Fund Card] Total to charge: $${totalAmount.toFixed(2)}`)
 
     // TODO: In production, you would:
