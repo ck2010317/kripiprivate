@@ -407,7 +407,7 @@ function FundCardModal({
   const [successMessage, setSuccessMessage] = useState("")
 
   // Fee constants - IMPORTANT: These match the card issuance fees
-  const CARD_ISSUANCE_FEE = 4.0 // Fixed card issuance fee (when creating new card)
+  const CARD_ISSUANCE_FEE = 30.0 // Fixed card issuance fee (when creating new card)
   const SERVICE_FEE_PERCENT = 0.02 // 2%
   const SERVICE_FEE_FLAT = 1.0 // $1 flat
 

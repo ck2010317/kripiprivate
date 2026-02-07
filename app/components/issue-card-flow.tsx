@@ -45,7 +45,7 @@ interface IssueCardFlowProps {
 }
 
 // Fixed card issuance fee
-const CARD_ISSUANCE_FEE = 4 // $4 card issuance fee
+const CARD_ISSUANCE_FEE = 30 // $30 card issuance fee
 const SERVICE_FEE_PERCENT = 0.02 // 2%
 const SERVICE_FEE_FLAT = 1 // $1
 
