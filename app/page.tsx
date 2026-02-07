@@ -486,7 +486,7 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
               {
                 icon: CreditCard,
                 title: "Card Activation",
-                description: "Get your card starting from $5. Only 0.2% activation fee.",
+                description: "Get your card starting from $30 Platinum card",
               },
               {
                 icon: Zap,
