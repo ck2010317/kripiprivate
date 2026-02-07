@@ -35,20 +35,49 @@ export async function GET(
       )
     }
 
-    // Optionally fetch latest details from KripiCard API
+    // Fetch latest details from KripiCard API and sync to DB
     try {
       const kripiDetails = await getCardDetails(card.kripiCardId)
       
-      // Update local balance if different
+      // Build update object for any changed fields
+      const updates: Record<string, any> = {}
+      
       if (kripiDetails.balance !== card.balance) {
-        await prisma.card.update({
-          where: { id: card.id },
-          data: { balance: kripiDetails.balance },
-        })
+        updates.balance = kripiDetails.balance
         card.balance = kripiDetails.balance
       }
+      
+      // Always sync real card details from KripiCard (fixes any dummy values in DB)
+      if (kripiDetails.card_number && kripiDetails.card_number !== card.cardNumber) {
+        updates.cardNumber = kripiDetails.card_number
+        card.cardNumber = kripiDetails.card_number
+      }
+      if (kripiDetails.expiry_date && kripiDetails.expiry_date !== card.expiryDate) {
+        updates.expiryDate = kripiDetails.expiry_date
+        card.expiryDate = kripiDetails.expiry_date
+      }
+      if (kripiDetails.cvv && kripiDetails.cvv !== card.cvv) {
+        updates.cvv = kripiDetails.cvv
+        card.cvv = kripiDetails.cvv
+      }
+      if (kripiDetails.status) {
+        const newStatus = kripiDetails.status === "ACTIVE" ? "ACTIVE" : kripiDetails.status === "FROZEN" ? "FROZEN" : card.status
+        if (newStatus !== card.status) {
+          updates.status = newStatus
+          card.status = newStatus as any
+        }
+      }
+
+      // Apply updates if any
+      if (Object.keys(updates).length > 0) {
+        console.log(`[Cards] Syncing card ${card.id} with KripiCard data:`, Object.keys(updates))
+        await prisma.card.update({
+          where: { id: card.id },
+          data: updates,
+        })
+      }
     } catch (kripiError) {
-      // API might be down or account needs funding - use local data
+      // API might be down - use local data
       console.warn("[Cards] Could not fetch from KripiCard API, using local data:", kripiError instanceof Error ? kripiError.message : "Unknown error")
     }
 

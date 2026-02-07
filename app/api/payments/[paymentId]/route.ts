@@ -254,7 +254,22 @@ export async function POST(
           throw new Error("KripiCard API returned invalid response - missing card_id")
         }
 
+        // CRITICAL: Validate card details are REAL, not dummy values
+        if (!kripiResponse.card_number || kripiResponse.card_number === "****" || kripiResponse.card_number.length < 10) {
+          console.error(`[Card Creation] ❌ Invalid card number from KripiCard:`, kripiResponse.card_number)
+          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid card number. Contact support with card ID: ${kripiResponse.card_id}`)
+        }
+        if (!kripiResponse.cvv || kripiResponse.cvv === "***" || kripiResponse.cvv.length < 3) {
+          console.error(`[Card Creation] ❌ Invalid CVV from KripiCard:`, kripiResponse.cvv)
+          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid CVV. Contact support with card ID: ${kripiResponse.card_id}`)
+        }
+        if (!kripiResponse.expiry_date || kripiResponse.expiry_date === "12/25" || !kripiResponse.expiry_date.includes("/")) {
+          console.error(`[Card Creation] ❌ Invalid expiry from KripiCard:`, kripiResponse.expiry_date)
+          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid expiry. Contact support with card ID: ${kripiResponse.card_id}`)
+        }
+
         console.log(`[Card Creation] ✅ Card created on KripiCard: ${kripiResponse.card_id}`)
+        console.log(`[Card Creation] ✅ Card details validated - number: *${kripiResponse.card_number.slice(-4)}, expiry: ${kripiResponse.expiry_date}`)
 
         // Store card in database - with retry logic
         let card
@@ -263,9 +278,9 @@ export async function POST(
           card = await prisma.card.create({
             data: {
               kripiCardId: kripiResponse.card_id,
-              cardNumber: kripiResponse.card_number || "****",
-              expiryDate: kripiResponse.expiry_date || "12/25",
-              cvv: kripiResponse.cvv || "***",
+              cardNumber: kripiResponse.card_number,
+              expiryDate: kripiResponse.expiry_date,
+              cvv: kripiResponse.cvv,
               nameOnCard: cardName,
               balance: kripiResponse.balance || cardAmount,
               userId: user.id,
@@ -300,9 +315,9 @@ export async function POST(
               message: "Card created but database save had an issue. Your card is active.",
               card: {
                 id: kripiResponse.card_id,
-                cardNumber: kripiResponse.card_number || "****",
-                expiryDate: kripiResponse.expiry_date || "12/25",
-                cvv: kripiResponse.cvv || "***",
+                cardNumber: kripiResponse.card_number,
+                expiryDate: kripiResponse.expiry_date,
+                cvv: kripiResponse.cvv,
                 nameOnCard: cardName,
                 balance: kripiResponse.balance || cardAmount,
                 status: "ACTIVE",

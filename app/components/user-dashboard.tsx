@@ -74,13 +74,20 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
       const data = await response.json()
       
       if (data.success) {
-        // Update the card with synced balance from KripiCard
+        // Update the card with ALL synced data from KripiCard (balance, number, cvv, expiry, status)
         setCards(cards.map(card => 
-          card.id === cardId ? { ...card, balance: data.card.balance } : card
+          card.id === cardId ? { 
+            ...card, 
+            balance: data.card.balance,
+            cardNumber: data.card.cardNumber || card.cardNumber,
+            expiryDate: data.card.expiryDate || card.expiryDate,
+            cvv: data.card.cvv || card.cvv,
+            status: data.card.status || card.status,
+          } : card
         ))
       }
     } catch (error) {
-      console.error("Failed to sync card balance:", error)
+      console.error("Failed to sync card:", error)
     } finally {
       setActionLoading(null)
     }

@@ -175,52 +175,71 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     console.log("[KripiCard] ✅ Card created with ID:", data.card_id)
     console.log("[KripiCard] Fetching full card details via Get_CardDetails...")
 
-    // Wait a moment for the card to be fully provisioned
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    // Retry Get_CardDetails up to 3 times with increasing delay
+    const MAX_RETRIES = 3
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      // Wait before fetching (card needs time to provision)
+      const delay = attempt * 2000 // 2s, 4s, 6s
+      console.log(`[KripiCard] Waiting ${delay}ms before Get_CardDetails attempt ${attempt}/${MAX_RETRIES}...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
 
-    // Fetch full card details
-    try {
-      const detailsResponse = await fetch(
-        `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${data.card_id}`,
-        { method: "GET", headers: { "Content-Type": "application/json" } }
-      )
+      try {
+        const detailsResponse = await fetch(
+          `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${data.card_id}`,
+          { method: "GET", headers: { "Content-Type": "application/json" } }
+        )
 
-      const detailsContentType = detailsResponse.headers.get("content-type")
-      if (detailsContentType && detailsContentType.includes("application/json")) {
+        const detailsContentType = detailsResponse.headers.get("content-type")
+        if (!detailsContentType || !detailsContentType.includes("application/json")) {
+          const text = await detailsResponse.text()
+          console.error(`[KripiCard] Attempt ${attempt}: Non-JSON response from Get_CardDetails:`, text.substring(0, 200))
+          continue
+        }
+
         const detailsData = await detailsResponse.json()
-        console.log("[KripiCard] Card details response:", JSON.stringify(detailsData, null, 2))
+        console.log(`[KripiCard] Attempt ${attempt}: Card details response:`, JSON.stringify(detailsData, null, 2))
 
         if (detailsData.success && detailsData.data?.details) {
           const d = detailsData.data.details
+          
+          // CRITICAL: Validate we got REAL card details, not empty/null values
+          if (!d.number || d.number === "****" || d.number.length < 10) {
+            console.error(`[KripiCard] Attempt ${attempt}: Got invalid card number: ${d.number}`)
+            continue
+          }
+          if (!d.cvv || d.cvv === "***" || d.cvv.length < 3) {
+            console.error(`[KripiCard] Attempt ${attempt}: Got invalid CVV: ${d.cvv}`)
+            continue
+          }
+          if (!d.expiryDate || d.expiryDate === "12/25" || !d.expiryDate.includes("/")) {
+            console.error(`[KripiCard] Attempt ${attempt}: Got invalid expiry: ${d.expiryDate}`)
+            continue
+          }
+
           const responseData: CreateCardResponse = {
             success: true,
             card_id: data.card_id,
-            card_number: d.number || "****",
-            expiry_date: d.expiryDate || "12/25",
-            cvv: d.cvv || "***",
+            card_number: d.number,
+            expiry_date: d.expiryDate,
+            cvv: d.cvv,
             balance: parseFloat(d.cardBalance) || request.amount,
             message: data.message,
           }
-          console.log("[KripiCard] ✅ Full card details retrieved:", JSON.stringify(responseData, null, 2))
+          console.log("[KripiCard] ✅ Full card details retrieved and VALIDATED:", JSON.stringify(responseData, null, 2))
           return responseData
+        } else {
+          console.error(`[KripiCard] Attempt ${attempt}: API returned success=${detailsData.success}, has details=${!!detailsData.data?.details}`)
         }
+      } catch (detailsError) {
+        console.error(`[KripiCard] Attempt ${attempt}: Failed to fetch card details:`, detailsError)
       }
-    } catch (detailsError) {
-      console.error("[KripiCard] Failed to fetch card details after creation:", detailsError)
     }
 
-    // Fallback if Get_CardDetails fails - return what we have
-    console.warn("[KripiCard] ⚠️ Could not fetch full details, returning partial data")
-    const responseData: CreateCardResponse = {
-      success: true,
-      card_id: data.card_id,
-      card_number: data.card_number || data.pan || "****",
-      expiry_date: data.expiry_date || data.expiry || "12/25",
-      cvv: data.cvv || data.cvc || "***",
-      balance: data.balance || request.amount,
-      message: data.message,
-    }
-    return responseData
+    // ALL retries failed - throw error, NEVER return dummy values
+    throw new Error(
+      `Card was created on KripiCard (ID: ${data.card_id}) but could not fetch card details after ${MAX_RETRIES} attempts. ` +
+      `Please contact support with card ID: ${data.card_id}`
+    )
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error"
     console.error("[KripiCard] ❌ Exception caught:", errorMsg)
@@ -385,12 +404,18 @@ export async function getCardDetails(cardId: string): Promise<CardDetailsRespons
   // Map the nested response to our flat interface
   if (data.data?.details) {
     const d = data.data.details
+    
+    if (!d.number || !d.cvv || !d.expiryDate) {
+      console.error("[KripiCard] Card details missing critical fields:", { number: !!d.number, cvv: !!d.cvv, expiryDate: !!d.expiryDate })
+      throw new Error(`Card details incomplete for ${cardId}. Missing: ${!d.number ? 'number ' : ''}${!d.cvv ? 'cvv ' : ''}${!d.expiryDate ? 'expiry' : ''}`)
+    }
+
     return {
       success: true,
       card_id: cardId,
-      card_number: d.number || "****",
-      expiry_date: d.expiryDate || "12/25",
-      cvv: d.cvv || "***",
+      card_number: d.number,
+      expiry_date: d.expiryDate,
+      cvv: d.cvv,
       balance: parseFloat(d.cardBalance) || 0,
       status: d.state === 1 ? "ACTIVE" : d.state === 2 ? "FROZEN" : "CANCELLED",
       name_on_card: d.addressMv?.firstName || "",

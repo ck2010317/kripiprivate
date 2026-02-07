@@ -158,11 +158,15 @@ export async function POST(request: NextRequest) {
     if (payment.cardType === "issue") {
       console.log(`[Card Issuance] Creating card for ${payment.nameOnCard}`)
 
+      // IMPORTANT: Use topupAmount (actual card balance), NOT amountUsd (which includes fees)
+      const cardAmount = payment.topupAmount || payment.amountUsd
+      console.log(`[Card Issuance] Card amount (topup only, no fees): $${cardAmount}`)
+
       // Create card with proper parameters
       const card = await createKripiCard({
-        amount: payment.amountUsd,
+        amount: cardAmount,
         bankBin: "49387519",
-        name_on_card: payment.nameOnCard || "Virtual Card",
+        name_on_card: (payment.nameOnCard || "Virtual Card").toUpperCase(),
         email: user.email || "noemail@example.com",
       })
 
@@ -177,26 +181,60 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // CRITICAL: Validate card details are REAL, not dummy values
+      if (!card.card_number || card.card_number === "****" || card.card_number.length < 10) {
+        console.error(`[Card Issuance] ❌ Invalid card number:`, card.card_number)
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "FAILED" },
+        })
+        return NextResponse.json(
+          { error: `Card created (ID: ${card.card_id}) but got invalid card number. Contact support with card ID: ${card.card_id}` },
+          { status: 500 }
+        )
+      }
+      if (!card.cvv || card.cvv === "***" || card.cvv.length < 3) {
+        console.error(`[Card Issuance] ❌ Invalid CVV:`, card.cvv)
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "FAILED" },
+        })
+        return NextResponse.json(
+          { error: `Card created (ID: ${card.card_id}) but got invalid CVV. Contact support with card ID: ${card.card_id}` },
+          { status: 500 }
+        )
+      }
+      if (!card.expiry_date || card.expiry_date === "12/25" || !card.expiry_date.includes("/")) {
+        console.error(`[Card Issuance] ❌ Invalid expiry:`, card.expiry_date)
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "FAILED" },
+        })
+        return NextResponse.json(
+          { error: `Card created (ID: ${card.card_id}) but got invalid expiry. Contact support with card ID: ${card.card_id}` },
+          { status: 500 }
+        )
+      }
+
+      console.log(`[Card Issuance] ✅ Card details validated - number: *${card.card_number.slice(-4)}, expiry: ${card.expiry_date}`)
+
       // Update payment to completed
       await prisma.payment.update({
         where: { id: payment.id },
         data: { 
           status: "COMPLETED",
-          cardId: card.card_id,
+          issuedCardId: card.card_id,
         },
       })
 
-      // Create card record
+      // Create card record with VALIDATED details
       await prisma.card.create({
         data: {
           kripiCardId: card.card_id,
-          cardNumber: card.card_number || "****",
-          expiryDate: card.expiry_date || "12/25",
-          cvv: card.cvv || "***",
+          cardNumber: card.card_number,
+          expiryDate: card.expiry_date,
+          cvv: card.cvv,
           nameOnCard: payment.nameOnCard || "Virtual Card",
-          lastFourPan: card.card_number?.slice(-4) || "****",
-          expiryMonth: parseInt(card.expiry_date.split("/")[0]),
-          expiryYear: parseInt(card.expiry_date.split("/")[1]),
           userId: user.id,
         },
       })

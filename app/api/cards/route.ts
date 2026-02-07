@@ -17,9 +17,9 @@ export async function POST(request: NextRequest) {
     const { amount, nameOnCard } = await request.json()
 
     // Validation
-    if (!amount || amount < 5) {
+    if (!amount || amount < 10) {
       return NextResponse.json(
-        { error: "Amount must be at least $5" },
+        { error: "Amount must be at least $10" },
         { status: 400 }
       )
     }
@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const cardholderName = nameOnCard || user.name
+    const cardholderName = (nameOnCard || user.name || "CARDHOLDER").toUpperCase()
 
-    // Create card via KripiCard API
+    // Create card via KripiCard API (includes retry + validation - will throw if details invalid)
     const kripiResponse = await createKripiCard({
       amount,
       name_on_card: cardholderName,
@@ -41,7 +41,14 @@ export async function POST(request: NextRequest) {
       bankBin: "49387519",
     })
 
-    // Store card in database
+    // CRITICAL: Double-check card details are valid (createKripiCard already validates, but be safe)
+    if (!kripiResponse.card_number || kripiResponse.card_number.length < 10 ||
+        !kripiResponse.cvv || kripiResponse.cvv.length < 3 ||
+        !kripiResponse.expiry_date || !kripiResponse.expiry_date.includes("/")) {
+      throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid details. Contact support.`)
+    }
+
+    // Store card in database with VALIDATED details
     const card = await prisma.card.create({
       data: {
         kripiCardId: kripiResponse.card_id,
