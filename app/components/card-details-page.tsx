@@ -115,6 +115,14 @@ export function CardDetailsPage({
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-12">
+        {/* 1-Hour Activation Notice - shown on newly created cards */}
+        <div className="mb-6 px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-3">
+          <span className="text-yellow-400 text-lg">⏳</span>
+          <p className="text-sm text-yellow-400">
+            Please wait 1 hour after activation before usage.
+          </p>
+        </div>
+
         {error && (
           <div className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
             <p className="text-sm text-destructive">{error}</p>
