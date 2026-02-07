@@ -549,6 +549,10 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
                 </>
               )}
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              ⏳ Please allow up to 1 hour for your card to become active after issuance.
+            </p>
           </div>
         </div>
       </main>
