@@ -595,15 +595,19 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
 
       const merchant = String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? tx.merchantName ?? "")
       
+      // Normalize status - KripiCard uses "Finish" 
+      let status = String(tx.status ?? tx.Status ?? "completed").toLowerCase()
+      if (status === "finish" || status === "settled") status = "completed"
+
       return {
-        transaction_id: String(tx.transaction_id ?? tx.id ?? tx.txn_id ?? tx.reference ?? `tx-${index}`),
-        card_id: String(tx.card_id ?? tx.cardId ?? cardId),
+        transaction_id: String(tx.transactionId ?? tx.transaction_id ?? tx.id ?? tx.txn_id ?? tx.reference ?? `tx-${index}`),
+        card_id: String(tx.card_id ?? tx.cardId ?? tx.cardNum ?? cardId),
         type,
         amount,
         merchant,
-        description: String(tx.description ?? tx.Description ?? tx.memo ?? tx.note ?? (merchant || type)),
-        date: String(tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? tx.timestamp ?? new Date().toISOString()),
-        status: String(tx.status ?? tx.Status ?? "completed").toLowerCase(),
+        description: String(tx.description ?? tx.Description ?? tx.remark ?? tx.memo ?? tx.note ?? (merchant || type)),
+        date: String(tx.recordTime ?? tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? tx.timestamp ?? new Date().toISOString()),
+        status,
         currency: String(tx.currency ?? tx.Currency ?? "USD"),
       }
     })
