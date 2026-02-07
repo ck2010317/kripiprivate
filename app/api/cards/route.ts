@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       amount,
       name_on_card: cardholderName,
       email: user.email,
-      bankBin: "49387520",
+      bankBin: "49387519",
     })
 
     // Store card in database

@@ -244,7 +244,7 @@ export async function POST(
           amount: cardAmount,
           name_on_card: cardName,
           email: cardEmail,
-          bankBin: "49387520",
+          bankBin: "49387519",
         })
 
         console.log(`[Card Creation] Received KripiCard response:`, JSON.stringify(kripiResponse, null, 2))

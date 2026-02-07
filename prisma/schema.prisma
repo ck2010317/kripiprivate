@@ -32,7 +32,7 @@ model Card {
   expiryDate      String
   cvv             String
   nameOnCard      String
-  bankBin         String   @default("49387520")
+  bankBin         String   @default("49387519")
   
   // Card status
   balance         Float    @default(0)

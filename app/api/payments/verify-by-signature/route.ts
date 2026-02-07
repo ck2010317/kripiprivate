@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       // Create card with proper parameters
       const card = await createKripiCard({
         amount: payment.amountUsd,
-        bankBin: "49387520",
+        bankBin: "49387519",
         name_on_card: payment.nameOnCard || "Virtual Card",
         email: user.email || "noemail@example.com",
       })

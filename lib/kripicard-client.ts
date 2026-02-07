@@ -105,7 +105,7 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     const payload = {
       api_key: API_KEY,
       amount: amount,
-      bankBin: request.bankBin || "49387520",
+      bankBin: request.bankBin || "49387519",
       name_on_card: request.name_on_card.toUpperCase().trim(),
       email: request.email.toLowerCase().trim(),
     }
