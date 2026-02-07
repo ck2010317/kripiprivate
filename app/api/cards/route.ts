@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { createCard as createKripiCard } from "@/lib/kripicard-client"
+import { createCard as createKripiCard, getCardDetails } from "@/lib/kripicard-client"
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get all cards for the current user
+// Get all cards for the current user (with live balance sync from KripiCard)
 export async function GET() {
   try {
     const user = await getCurrentUser()
@@ -112,9 +112,55 @@ export async function GET() {
       },
     })
 
+    // Sync balances from KripiCard API in parallel for all cards
+    const syncedCards = await Promise.all(
+      cards.map(async (card) => {
+        try {
+          const kripiDetails = await getCardDetails(card.kripiCardId)
+          
+          const updates: Record<string, any> = {}
+          
+          if (kripiDetails.balance !== card.balance) {
+            updates.balance = kripiDetails.balance
+          }
+          if (kripiDetails.card_number && kripiDetails.card_number !== card.cardNumber) {
+            updates.cardNumber = kripiDetails.card_number
+          }
+          if (kripiDetails.expiry_date && kripiDetails.expiry_date !== card.expiryDate) {
+            updates.expiryDate = kripiDetails.expiry_date
+          }
+          if (kripiDetails.cvv && kripiDetails.cvv !== card.cvv) {
+            updates.cvv = kripiDetails.cvv
+          }
+          if (kripiDetails.status) {
+            const newStatus = kripiDetails.status === "ACTIVE" ? "ACTIVE" : kripiDetails.status === "FROZEN" ? "FROZEN" : card.status
+            if (newStatus !== card.status) {
+              updates.status = newStatus
+            }
+          }
+
+          // Apply updates to DB if any changed
+          if (Object.keys(updates).length > 0) {
+            console.log(`[Cards] Auto-syncing card ${card.id}:`, Object.keys(updates))
+            await prisma.card.update({
+              where: { id: card.id },
+              data: updates,
+            })
+            return { ...card, ...updates }
+          }
+          
+          return card
+        } catch (kripiError) {
+          // If API call fails for one card, return DB data
+          console.warn(`[Cards] Failed to sync card ${card.id}:`, kripiError instanceof Error ? kripiError.message : "Unknown")
+          return card
+        }
+      })
+    )
+
     return NextResponse.json({
       success: true,
-      cards,
+      cards: syncedCards,
     })
   } catch (error) {
     console.error("[Cards] Get cards error:", error)
