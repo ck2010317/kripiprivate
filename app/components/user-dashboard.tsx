@@ -298,13 +298,6 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
                   </div>
                 </div>
 
-                {/* 1-Hour Activation Notice */}
-                <div className="mx-6 mb-4 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                  <p className="text-xs text-yellow-400">
-                    Please wait 1 hour after activation before usage.
-                  </p>
-                </div>
 
                 {/* Card Actions */}
                 <div className="p-4 border-t border-border/50 grid grid-cols-3 gap-2">
