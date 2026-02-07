@@ -635,7 +635,7 @@ function FundCardModal({
 
               {/* Fixed Fee */}
               <div className="p-4 rounded-lg bg-secondary/5 border border-secondary/30">
-                <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (2% + $1)</p>
+                <p className="text-xs text-muted-foreground font-semibold mb-2">SERVICE FEE (3% + $1)</p>
                 <div className="flex items-baseline justify-between">
                   <p className="text-3xl font-bold text-secondary">${serviceFee.toFixed(2)}</p>
                   <p className="text-xs text-muted-foreground">Variable</p>
