@@ -524,6 +524,128 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
         </div>
       </section>
 
+      {/* Card Features Section */}
+      <section className="py-16 sm:py-20 px-4 border-t border-border/50" data-scroll-animation="scroll-animate">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-4 mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">Card Features</h2>
+            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground px-2">Everything you need in a premium virtual card</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+            {/* 3DS Secure */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">🔒</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">3DS Secure</h3>
+              <p className="text-sm sm:text-base text-gray-400">Full 3D Secure authentication for safe online transactions worldwide</p>
+            </div>
+
+            {/* Apple Pay */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">🍎</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Apple Pay</h3>
+              <p className="text-sm sm:text-base text-gray-400">Add your card to Apple Pay and pay contactlessly from your iPhone or Apple Watch</p>
+            </div>
+
+            {/* Google Pay */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">📱</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Google Pay</h3>
+              <p className="text-sm sm:text-base text-gray-400">Seamlessly add to Google Pay for fast and secure payments on Android devices</p>
+            </div>
+
+            {/* $1M/Year */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">💰</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">$1M / Year</h3>
+              <p className="text-sm sm:text-base text-gray-400">Up to $1,000,000 annual spending limit for high-volume business and personal use</p>
+            </div>
+
+            {/* Ads Spend */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">📢</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Ads Spend</h3>
+              <p className="text-sm sm:text-base text-gray-400">Perfect for Facebook, Google, TikTok ads and all major advertising platforms</p>
+            </div>
+
+            {/* Global Acceptance */}
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20 p-6 sm:p-8 space-y-4 hover:border-primary/40 transition-all">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                <span className="text-xl sm:text-2xl">🌍</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Global Acceptance</h3>
+              <p className="text-sm sm:text-base text-gray-400">Accepted at millions of merchants worldwide wherever Visa is supported</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Why Premium? Section */}
+      <section className="py-16 sm:py-20 px-4 border-t border-border/50" data-scroll-animation="scroll-animate">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center space-y-4 mb-12 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">Why Premium?</h2>
+            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground px-2">Built for power users who demand the best</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            {/* Valid 3 Years */}
+            <div className="flex items-start gap-4 p-6 sm:p-8 rounded-xl border border-border/50 bg-card/30 hover:bg-card/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <span className="text-lg">✅</span>
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">Valid 3 Years</h3>
+                <p className="text-sm sm:text-base text-gray-400">No monthly fees, no renewal hassle — your card stays active for 3 full years</p>
+              </div>
+            </div>
+
+            {/* High Spend Limits */}
+            <div className="flex items-start gap-4 p-6 sm:p-8 rounded-xl border border-border/50 bg-card/30 hover:bg-card/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <span className="text-lg">✅</span>
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">High Spend Limits</h3>
+                <p className="text-sm sm:text-base text-gray-400">Designed for ads & business — spend up to $1M/year with no arbitrary caps</p>
+              </div>
+            </div>
+
+            {/* Apple Pay & Google Pay Ready */}
+            <div className="flex items-start gap-4 p-6 sm:p-8 rounded-xl border border-border/50 bg-card/30 hover:bg-card/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <span className="text-lg">✅</span>
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">Apple Pay & Google Pay Ready</h3>
+                <p className="text-sm sm:text-base text-gray-400">Instantly add to your mobile wallet and pay anywhere with a tap</p>
+              </div>
+            </div>
+
+            {/* 3DS Secure Payments */}
+            <div className="flex items-start gap-4 p-6 sm:p-8 rounded-xl border border-border/50 bg-card/30 hover:bg-card/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <span className="text-lg">✅</span>
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">3DS Secure Payments</h3>
+                <p className="text-sm sm:text-base text-gray-400">Every transaction is protected with 3D Secure authentication for maximum safety</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Terminal Demo Section */}
       <section className="py-20 px-4 border-t border-border/50">
         <div className="max-w-2xl mx-auto space-y-6">
