@@ -42,14 +42,14 @@ function detectIntent(message: string): { intent: string; params: Record<string,
     return { intent: "balance", params: {} }
   }
 
-  // Freeze card
-  if (msg.match(/freeze|lock|block|disable|pause/)) {
-    return { intent: "freeze", params: {} }
-  }
-
-  // Unfreeze card
+  // Unfreeze card (MUST be before freeze — "unfreeze" contains "freeze")
   if (msg.match(/unfreeze|unlock|unblock|enable|resume|activate|unpaused/)) {
     return { intent: "unfreeze", params: {} }
+  }
+
+  // Freeze card
+  if (msg.match(/\bfreeze\b|lock|block|disable|pause/)) {
+    return { intent: "freeze", params: {} }
   }
 
   // Transaction history
