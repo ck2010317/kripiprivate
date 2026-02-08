@@ -38,6 +38,8 @@ export function ChatWidget({ userName }: ChatWidgetProps) {
   const [isListening, setIsListening] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<any>(null)
+  const [lastAction, setLastAction] = useState<string | null>(null)
+  const [lastActionData, setLastActionData] = useState<any>(null)
   const [verifyingPayment, setVerifyingPayment] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -101,7 +103,7 @@ export function ChatWidget({ userName }: ChatWidgetProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text.trim() }),
+        body: JSON.stringify({ message: text.trim(), lastAction, lastActionData }),
       })
 
       const data = await res.json()
@@ -116,6 +118,10 @@ export function ChatWidget({ userName }: ChatWidgetProps) {
       }
 
       setMessages(prev => [...prev, assistantMsg])
+
+      // Track last action for follow-up context
+      setLastAction(data.action || null)
+      setLastActionData(data.actionData || null)
 
       // Track payment if created
       if (data.action === "payment_created" && data.actionData) {
@@ -382,6 +388,57 @@ export function ChatWidget({ userName }: ChatWidgetProps) {
               <Play className="w-4 h-4" />
               Yes, Unfreeze Card •••• {msg.actionData.last4}
             </button>
+          </div>
+        )
+
+      case "select_card_freeze":
+        return (
+          <div className="mt-3 space-y-2">
+            {msg.actionData?.cards?.map((card: any, i: number) => (
+              <button
+                key={card.id}
+                onClick={() => sendMessage(`${i + 1}`)}
+                disabled={loading}
+                className="flex items-center gap-2 w-full px-3 py-2.5 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 rounded-lg text-sm transition-colors"
+              >
+                <Snowflake className="w-4 h-4 text-blue-400" />
+                Freeze •••• {card.last4} ({card.name})
+              </button>
+            ))}
+          </div>
+        )
+
+      case "select_card_unfreeze":
+        return (
+          <div className="mt-3 space-y-2">
+            {msg.actionData?.cards?.map((card: any, i: number) => (
+              <button
+                key={card.id}
+                onClick={() => sendMessage(`${i + 1}`)}
+                disabled={loading}
+                className="flex items-center gap-2 w-full px-3 py-2.5 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 rounded-lg text-sm transition-colors"
+              >
+                <Play className="w-4 h-4 text-green-400" />
+                Unfreeze •••• {card.last4} ({card.name})
+              </button>
+            ))}
+          </div>
+        )
+
+      case "select_card_topup":
+        return (
+          <div className="mt-3 space-y-2">
+            {msg.actionData?.cards?.map((card: any, i: number) => (
+              <button
+                key={card.id}
+                onClick={() => sendMessage(`${i + 1}`)}
+                disabled={loading}
+                className="flex items-center gap-2 w-full px-3 py-2.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 rounded-lg text-sm transition-colors"
+              >
+                <CreditCard className="w-4 h-4 text-purple-400" />
+                Top up •••• {card.last4} — ${card.balance?.toFixed(2)}
+              </button>
+            ))}
           </div>
         )
 

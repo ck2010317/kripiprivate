@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { message, context } = await request.json()
+    const { message, context, lastAction, lastActionData } = await request.json()
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ response: "I didn't catch that. Could you try again?", action: null })
@@ -109,6 +109,181 @@ export async function POST(request: NextRequest) {
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
     })
+
+    // ── Handle follow-up selections from previous multi-card prompts ──
+    const msg = message.toLowerCase().trim()
+    const isNumberSelection = /^[1-9]\d*$/.test(msg)
+    const isLast4Selection = /^\d{4}$/.test(msg) && !isNumberSelection
+
+    if (lastAction && (isNumberSelection || isLast4Selection || intent === "unknown")) {
+      const selectionIndex = isNumberSelection ? parseInt(msg) - 1 : -1
+      const cards: any[] = lastActionData?.cards || []
+
+      // Helper: find card by number selection or last4
+      const findCard = () => {
+        if (isNumberSelection && selectionIndex >= 0 && selectionIndex < cards.length) {
+          return cards[selectionIndex]
+        }
+        if (isLast4Selection || msg.length === 4) {
+          return cards.find((c: any) => c.last4 === msg)
+        }
+        // Try to find last4 in the message
+        const last4Match = msg.match(/(\d{4})/)?.[1]
+        if (last4Match) {
+          return cards.find((c: any) => c.last4 === last4Match)
+        }
+        return null
+      }
+
+      // ── SELECT CARD FOR FREEZE ──
+      if (lastAction === "select_card_freeze") {
+        const card = findCard()
+        if (card) {
+          return NextResponse.json({
+            response: `Freeze card •••• ${card.last4} (${card.name})?\n\nThis will temporarily disable the card.`,
+            action: "confirm_freeze",
+            actionData: { cardId: card.id, last4: card.last4 },
+          })
+        }
+        return NextResponse.json({
+          response: `I didn't catch that. Please reply with a number (e.g. "1") or the last 4 digits of the card you want to freeze.`,
+          action: lastAction,
+          actionData: lastActionData,
+        })
+      }
+
+      // ── SELECT CARD FOR UNFREEZE ──
+      if (lastAction === "select_card_unfreeze") {
+        const card = findCard()
+        if (card) {
+          return NextResponse.json({
+            response: `Unfreeze card •••• ${card.last4} (${card.name})?`,
+            action: "confirm_unfreeze",
+            actionData: { cardId: card.id, last4: card.last4 },
+          })
+        }
+        return NextResponse.json({
+          response: `I didn't catch that. Please reply with a number (e.g. "1") or the last 4 digits of the card you want to unfreeze.`,
+          action: lastAction,
+          actionData: lastActionData,
+        })
+      }
+
+      // ── SELECT CARD FOR TOPUP ──
+      if (lastAction === "select_card_topup") {
+        const card = findCard()
+        const amount = lastActionData?.amount
+        if (card && amount) {
+          // Find full card from DB
+          const fullCard = userCards.find(c => c.id === card.id)
+          if (!fullCard) {
+            return NextResponse.json({ response: `Card not found. Please try again.`, action: null })
+          }
+
+          const serviceFee = (amount * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT
+          const totalAmount = amount + serviceFee
+
+          try {
+            const { solAmount, solPrice } = await usdToSol(totalAmount)
+            const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+            const payment = await prisma.payment.create({
+              data: {
+                amountUsd: totalAmount,
+                amountSol: solAmount,
+                solPriceAtTime: solPrice,
+                cardType: "fund",
+                nameOnCard: fullCard.nameOnCard,
+                targetCardId: fullCard.id,
+                topupAmount: amount,
+                topupFee: serviceFee,
+                userId: user.id,
+                expiresAt,
+              },
+            })
+
+            return NextResponse.json({
+              response: `Top-up payment ready!\n\n` +
+                `💳 **Card**: •••• ${fullCard.cardNumber.slice(-4)} (${fullCard.nameOnCard})\n` +
+                `💰 **Top-up Amount**: $${amount.toFixed(2)}\n` +
+                `📊 **Service Fee** (3% + $1): $${serviceFee.toFixed(2)}\n` +
+                `💵 **Total**: $${totalAmount.toFixed(2)}\n` +
+                `◎ **Pay**: ${solAmount.toFixed(6)} SOL\n\n` +
+                `Send exactly **${solAmount.toFixed(6)} SOL** to:\n\`${PAYMENT_WALLET}\`\n\n` +
+                `⏳ Payment expires in 30 minutes.\n\nOnce you send the SOL, click **"I've Paid"** below.`,
+              action: "payment_created",
+              actionData: {
+                paymentId: payment.id,
+                amountSol: solAmount,
+                amountUsd: totalAmount,
+                paymentWallet: PAYMENT_WALLET,
+                expiresAt: payment.expiresAt,
+                isTopup: true,
+                cardLast4: fullCard.cardNumber.slice(-4),
+              },
+            })
+          } catch (err) {
+            return NextResponse.json({ response: `Sorry, something went wrong creating the top-up payment. Please try again.`, action: null })
+          }
+        }
+        return NextResponse.json({
+          response: `I didn't catch that. Please reply with a number (e.g. "1") or the last 4 digits of the card you want to top up.`,
+          action: lastAction,
+          actionData: lastActionData,
+        })
+      }
+
+      // ── NEED NAME for card creation ──
+      if (lastAction === "need_name" && lastActionData?.amount) {
+        const name = message.replace(/(?:name|named|for|it|call|put)\s*/gi, "").trim().toUpperCase() || message.trim().toUpperCase()
+        if (name.length >= 2 && name.length <= 30) {
+          const amount = lastActionData.amount
+          const serviceFee = (amount * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT
+          const totalAmount = amount + CARD_ISSUANCE_FEE + serviceFee
+
+          try {
+            const { solAmount, solPrice } = await usdToSol(totalAmount)
+            const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+            const payment = await prisma.payment.create({
+              data: {
+                amountUsd: totalAmount,
+                amountSol: solAmount,
+                solPriceAtTime: solPrice,
+                cardType: "issue",
+                nameOnCard: name,
+                topupAmount: amount,
+                topupFee: serviceFee,
+                userId: user.id,
+                expiresAt,
+              },
+            })
+
+            return NextResponse.json({
+              response: `Here's your card payment:\n\n` +
+                `💳 **Card Value**: $${amount.toFixed(2)}\n` +
+                `👤 **Name**: ${name}\n` +
+                `🏷️ **Issuance Fee**: $${CARD_ISSUANCE_FEE.toFixed(2)}\n` +
+                `📊 **Service Fee** (3% + $1): $${serviceFee.toFixed(2)}\n` +
+                `💵 **Total**: $${totalAmount.toFixed(2)}\n` +
+                `◎ **Pay**: ${solAmount.toFixed(6)} SOL\n\n` +
+                `Send exactly **${solAmount.toFixed(6)} SOL** to:\n\`${PAYMENT_WALLET}\`\n\n` +
+                `⏳ Payment expires in 30 minutes.\n\nOnce you send the SOL, click **"I've Paid"** below.`,
+              action: "payment_created",
+              actionData: {
+                paymentId: payment.id,
+                amountSol: solAmount,
+                amountUsd: totalAmount,
+                paymentWallet: PAYMENT_WALLET,
+                expiresAt: payment.expiresAt,
+                cardName: name,
+                cardAmount: amount,
+              },
+            })
+          } catch (err) {
+            return NextResponse.json({ response: `Sorry, something went wrong. Please try again.`, action: null })
+          }
+        }
+      }
+    }
 
     switch (intent) {
       case "greeting": {
@@ -433,7 +608,7 @@ export async function POST(request: NextRequest) {
         const card = userCards[0]
         try {
           const details = await getCardDetails(card.kripiCardId)
-          const transactions = details.transactions || []
+          const transactions = (details as any).transactions || []
 
           if (transactions.length === 0) {
             return NextResponse.json({
