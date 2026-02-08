@@ -21,7 +21,7 @@ You need to set these variables in the Vercel dashboard:
 
 ### 4. Solana Configuration
 - **Key**: `PAYMENT_WALLET`
-- **Value**: `JBP9PMhYZ8UyZNbXuDzCvLZ5WGz5gkTicGdsnDYYjWFf`
+- **Value**: `2WWEW2Ry4XvBP1eQWuS1iKb515UBnkFDuLUsbwYvbxqj`
 
 - **Key**: `SOLANA_RPC_URL`
 - **Value**: `https://mainnet.helius-rpc.com/?api-key=f3417b56-61ad-4ba8-b0f9-3695ea859a58`
