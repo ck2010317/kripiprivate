@@ -20,6 +20,8 @@ import {
   Copy,
   User,
   LogOut,
+  DollarSign,
+  RefreshCw,
 } from "lucide-react"
 import { AuthProvider, useAuth } from "@/app/context/auth-context"
 import { AuthModal } from "@/app/components/auth-modal"
@@ -204,9 +206,16 @@ function HomeContent() {
         <UserDashboard 
           onBack={() => setActiveTab("landing")}
           onCreateCard={() => setActiveTab("issuing")}
+          onAdmin={user.email === "shaann950@gmail.com" ? () => setActiveTab("admin") : undefined}
         />
       )}
       {activeTab === "wallet" && <WalletPage setActiveTab={setActiveTab} />}
+      {activeTab === "admin" && user && (
+        <AdminLiveDashboard 
+          onBack={() => setActiveTab("dashboard")}
+          userEmail={user.email}
+        />
+      )}
 
       {/* Auth Modal */}
       <AuthModal
@@ -1014,64 +1023,326 @@ function WalletPage({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
   )
 }
 
-function DashboardPage({ setActiveTab }: { setActiveTab: (tab: string) => void }) {
+interface AdminStats {
+  totalCards: number
+  activeCards: number
+  frozenCards: number
+  totalUsers: number
+  totalDepositVolumeUsd: number
+  totalDepositVolumeSol: number
+  issuanceVolumeUsd: number
+  topupVolumeUsd: number
+  totalCardBalance: number
+  pendingPayments: number
+  todayCards: number
+  todayVolumeUsd: number
+  totalCompletedPayments: number
+  recentPayments: {
+    id: string
+    amountUsd: number
+    amountSol: number
+    cardType: string
+    nameOnCard: string | null
+    createdAt: string
+    user: { email: string; name: string }
+  }[]
+}
+
+function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEmail: string }) {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+
+  const ADMIN_EMAILS = ["shaann950@gmail.com"]
+  const isAdmin = ADMIN_EMAILS.includes(userEmail)
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch("/api/admin/stats")
+      const data = await res.json()
+      if (data.success) {
+        setStats(data.stats)
+        setLastUpdated(new Date())
+      }
+    } catch (err) {
+      console.error("Failed to fetch admin stats:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAdmin) return
+    fetchStats()
+  }, [isAdmin])
+
+  useEffect(() => {
+    if (!isAdmin || !autoRefresh) return
+    const interval = setInterval(fetchStats, 10000) // every 10 seconds
+    return () => clearInterval(interval)
+  }, [isAdmin, autoRefresh])
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
+          <h2 className="text-2xl font-bold">Access Denied</h2>
+          <p className="text-muted-foreground">You don&apos;t have admin access.</p>
+          <Button onClick={onBack}>Go Back</Button>
+        </div>
+      </div>
+    )
+  }
+
+  const formatUsd = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${n.toFixed(2)}`
+  const timeAgo = (date: string) => {
+    const diff = Date.now() - new Date(date).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return "just now"
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setActiveTab("landing")}>
-              ← Back
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              ← Back to Dashboard
             </Button>
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Admin Panel</h1>
+              {/* Live Indicator */}
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/30">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                </span>
+                <span className="text-xs font-medium text-green-400">LIVE</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="text-xs text-muted-foreground">
+                Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <Button
+              variant={autoRefresh ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={autoRefresh ? "bg-green-600 hover:bg-green-700" : ""}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? "animate-spin" : ""}`} style={autoRefresh ? { animationDuration: "3s" } : {}} />
+              {autoRefresh ? "Auto 10s" : "Paused"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-12 space-y-8">
-        <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <h2 className="text-xl font-semibold">Account Status</h2>
-          <div className="grid md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Project Name</p>
-              <p className="text-lg font-semibold">PrivatePay</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Current Balance</p>
-              <p className="text-lg font-semibold text-primary">$0.00</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <p className="text-lg font-semibold capitalize text-primary">active</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Markup Rate</p>
-              <p className="text-lg font-semibold">0%</p>
-            </div>
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-6">
+        {loading && !stats ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        </div>
+        ) : stats ? (
+          <>
+            {/* Top Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Cards */}
+              <Card className="p-5 bg-gradient-to-br from-purple-500/10 to-purple-500/5 border-purple-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground">Total Cards</p>
+                  <CreditCard className="w-5 h-5 text-purple-400" />
+                </div>
+                <p className="text-3xl font-bold text-purple-400">{stats.totalCards}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.activeCards} active · {stats.frozenCards} frozen
+                </p>
+              </Card>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          <Card className="border-border/50 bg-card/30 p-6 space-y-2 animate-slide-up">
-            <p className="text-sm text-muted-foreground">Cards Issued</p>
-            <h3 className="text-3xl font-bold">0</h3>
-          </Card>
-          <Card
-            className="border-border/50 bg-card/30 p-6 space-y-2 animate-slide-up"
-            style={{ animationDelay: "50ms" }}
-          >
-            <p className="text-sm text-muted-foreground">Total Volume</p>
-            <h3 className="text-3xl font-bold">$0.00M</h3>
-          </Card>
-          <Card
-            className="border-border/50 bg-card/30 p-6 space-y-2 animate-slide-up"
-            style={{ animationDelay: "100ms" }}
-          >
-            <p className="text-sm text-muted-foreground">Wallet Address</p>
-            <p className="text-sm font-mono text-primary">Not configured</p>
-          </Card>
-        </div>
-      </div>
+              {/* Total Deposit Volume */}
+              <Card className="p-5 bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground">Deposit Volume</p>
+                  <DollarSign className="w-5 h-5 text-green-400" />
+                </div>
+                <p className="text-3xl font-bold text-green-400">{formatUsd(stats.totalDepositVolumeUsd)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.totalDepositVolumeSol.toFixed(4)} SOL total
+                </p>
+              </Card>
+
+              {/* Total Users */}
+              <Card className="p-5 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border-cyan-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground">Total Users</p>
+                  <User className="w-5 h-5 text-cyan-400" />
+                </div>
+                <p className="text-3xl font-bold text-cyan-400">{stats.totalUsers}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.totalCompletedPayments} completed payments
+                </p>
+              </Card>
+
+              {/* Total Card Balance */}
+              <Card className="p-5 bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border-yellow-500/20">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground">Cards Balance</p>
+                  <Wallet className="w-5 h-5 text-yellow-400" />
+                </div>
+                <p className="text-3xl font-bold text-yellow-400">{formatUsd(stats.totalCardBalance)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  across all cards
+                </p>
+              </Card>
+            </div>
+
+            {/* Today's Stats */}
+            <Card className="p-6 bg-gradient-to-r from-primary/5 to-secondary/5 border-primary/20">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  <h2 className="text-lg font-bold">Today&apos;s Activity</h2>
+                </div>
+                <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/30">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="text-xs text-green-400">Live</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div>
+                  <p className="text-sm text-muted-foreground">Cards Created Today</p>
+                  <p className="text-2xl font-bold">{stats.todayCards}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Today&apos;s Volume</p>
+                  <p className="text-2xl font-bold text-green-400">{formatUsd(stats.todayVolumeUsd)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Issuance Volume</p>
+                  <p className="text-2xl font-bold text-purple-400">{formatUsd(stats.issuanceVolumeUsd)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Topup Volume</p>
+                  <p className="text-2xl font-bold text-cyan-400">{formatUsd(stats.topupVolumeUsd)}</p>
+                </div>
+              </div>
+              {stats.pendingPayments > 0 && (
+                <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                  <AlertCircle className="w-4 h-4 text-yellow-400" />
+                  <span className="text-sm text-yellow-400">{stats.pendingPayments} payment(s) pending confirmation</span>
+                </div>
+              )}
+            </Card>
+
+            {/* Volume Breakdown */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="p-6 border-border/50">
+                <h3 className="text-lg font-bold mb-4">Volume Breakdown</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                      <span className="text-sm">Card Issuance</span>
+                    </div>
+                    <span className="font-bold text-purple-400">{formatUsd(stats.issuanceVolumeUsd)}</span>
+                  </div>
+                  <div className="w-full bg-muted/30 rounded-full h-2">
+                    <div className="bg-purple-500 h-2 rounded-full transition-all duration-1000" style={{ width: `${stats.totalDepositVolumeUsd > 0 ? (stats.issuanceVolumeUsd / stats.totalDepositVolumeUsd) * 100 : 0}%` }}></div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-cyan-500"></div>
+                      <span className="text-sm">Card Topups</span>
+                    </div>
+                    <span className="font-bold text-cyan-400">{formatUsd(stats.topupVolumeUsd)}</span>
+                  </div>
+                  <div className="w-full bg-muted/30 rounded-full h-2">
+                    <div className="bg-cyan-500 h-2 rounded-full transition-all duration-1000" style={{ width: `${stats.totalDepositVolumeUsd > 0 ? (stats.topupVolumeUsd / stats.totalDepositVolumeUsd) * 100 : 0}%` }}></div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Deposit Wallet */}
+              <Card className="p-6 border-border/50">
+                <h3 className="text-lg font-bold mb-4">Deposit Wallet</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">SOL Deposit Address</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded break-all">JBP9PMhYZ8UyZNbXuDzCvLZ5WGz5gkTicGdsnDYYjWFf</code>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Total SOL Received</p>
+                    <p className="text-xl font-bold">{stats.totalDepositVolumeSol.toFixed(4)} SOL</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Total USD Value</p>
+                    <p className="text-xl font-bold text-green-400">{formatUsd(stats.totalDepositVolumeUsd)}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Recent Activity */}
+            <Card className="p-6 border-border/50">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">Recent Transactions</h3>
+                <span className="text-xs text-muted-foreground">Last {stats.recentPayments.length} completed</span>
+              </div>
+              {stats.recentPayments.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {stats.recentPayments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-card/50 border border-border/30 hover:border-border/60 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                          p.cardType === "issue" ? "bg-purple-500/20" : "bg-cyan-500/20"
+                        }`}>
+                          {p.cardType === "issue" ? (
+                            <CreditCard className="w-4 h-4 text-purple-400" />
+                          ) : (
+                            <Zap className="w-4 h-4 text-cyan-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">
+                            {p.cardType === "issue" ? "Card Issued" : "Card Topup"}
+                            {p.nameOnCard && <span className="text-muted-foreground"> · {p.nameOnCard}</span>}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{p.user.email} · {timeAgo(p.createdAt)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-green-400">+{formatUsd(p.amountUsd)}</p>
+                        <p className="text-xs text-muted-foreground">{p.amountSol.toFixed(4)} SOL</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">No transactions yet</p>
+              )}
+            </Card>
+          </>
+        ) : (
+          <p className="text-muted-foreground text-center py-20">Failed to load stats</p>
+        )}
+      </main>
     </div>
   )
 }
