@@ -37,9 +37,10 @@ interface CardData {
 interface UserDashboardProps {
   onBack: () => void
   onCreateCard: () => void
+  onAdmin?: () => void
 }
 
-export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
+export function UserDashboard({ onBack, onCreateCard, onAdmin }: UserDashboardProps) {
   const { user, logout } = useAuth()
   const [cards, setCards] = useState<CardData[]>([])
   const [loading, setLoading] = useState(true)
@@ -188,6 +189,11 @@ export function UserDashboard({ onBack, onCreateCard }: UserDashboardProps) {
               <Plus className="w-4 h-4 mr-2" />
               Issue New Card
             </Button>
+            {onAdmin && (
+              <Button variant="outline" size="sm" onClick={onAdmin} className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10">
+                ⚡ Admin
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
