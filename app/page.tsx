@@ -28,6 +28,7 @@ import { AuthModal } from "@/app/components/auth-modal"
 import { UserDashboard } from "@/app/components/user-dashboard"
 import { IssueCardFlow } from "@/app/components/issue-card-flow"
 import { CardPurchase } from "@/app/components/card-purchase"
+import { ChatWidget } from "@/app/components/chat-widget"
 
 // Scroll Animation Hook
 function useScrollAnimation() {
@@ -224,6 +225,9 @@ function HomeContent() {
         onSuccess={handleAuthSuccess}
         defaultMode={authMode}
       />
+
+      {/* AI Chat Agent - only for logged-in users */}
+      {user && <ChatWidget userName={user.name || user.email} />}
     </div>
   )
 }
