@@ -115,19 +115,36 @@ export async function POST(request: NextRequest) {
     const isNumberSelection = /^[1-9]\d*$/.test(msg)
     const isLast4Selection = /^\d{4}$/.test(msg) && !isNumberSelection
 
-    if (lastAction && (isNumberSelection || isLast4Selection || intent === "unknown")) {
-      const selectionIndex = isNumberSelection ? parseInt(msg) - 1 : -1
+    // Parse natural language numbers: "first one", "second", "1st", "2nd", etc.
+    const parseNaturalNumber = (text: string): number => {
+      const t = text.toLowerCase().trim()
+      if (/^[1-9]\d*$/.test(t)) return parseInt(t)
+      if (/\b(1st|first|one|1)\b/.test(t)) return 1
+      if (/\b(2nd|second|two|2)\b/.test(t)) return 2
+      if (/\b(3rd|third|three|3)\b/.test(t)) return 3
+      if (/\b(4th|fourth|four|4)\b/.test(t)) return 4
+      if (/\b(5th|fifth|five|5)\b/.test(t)) return 5
+      return -1
+    }
+
+    const naturalNumber = parseNaturalNumber(msg)
+    const hasContext = lastAction && (
+      lastAction === "select_card_freeze" || 
+      lastAction === "select_card_unfreeze" || 
+      lastAction === "select_card_topup" || 
+      lastAction === "need_name"
+    )
+
+    if (hasContext) {
+      const selectionIndex = naturalNumber > 0 ? naturalNumber - 1 : -1
       const cards: any[] = lastActionData?.cards || []
 
-      // Helper: find card by number selection or last4
+      // Helper: find card by number selection, natural language, or last4
       const findCard = () => {
-        if (isNumberSelection && selectionIndex >= 0 && selectionIndex < cards.length) {
+        if (selectionIndex >= 0 && selectionIndex < cards.length) {
           return cards[selectionIndex]
         }
-        if (isLast4Selection || msg.length === 4) {
-          return cards.find((c: any) => c.last4 === msg)
-        }
-        // Try to find last4 in the message
+        // Try last4 digits in the message
         const last4Match = msg.match(/(\d{4})/)?.[1]
         if (last4Match) {
           return cards.find((c: any) => c.last4 === last4Match)
