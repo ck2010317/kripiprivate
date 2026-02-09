@@ -1315,8 +1315,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
             </Card>
 
             {/* Pending Card Assignments */}
-            {pendingCards.length > 0 && (
-              <Card className="p-6 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-yellow-500/20">
+            <Card className="p-6 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-yellow-500/20">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
@@ -1333,66 +1332,74 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                     Open KripiCard Dashboard →
                   </Button>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">These users have paid. Create their card on KripiCard dashboard, then paste the Card ID below.</p>
-                <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                  {pendingCards.map((card) => (
-                    <div key={card.id} className="p-4 rounded-lg bg-card/50 border border-border/30">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">PENDING</span>
-                            <span className="text-sm font-bold">{card.nameOnCard}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground space-y-0.5">
-                            <p>📧 {card.user?.email || "Unknown"}</p>
-                            <p>💰 Balance: <span className="text-primary font-medium">${card.balance.toFixed(2)}</span></p>
-                            {card.payment && (
-                              <>
-                                <p>💳 Paid: ${card.payment.amountUsd.toFixed(2)} ({card.payment.amountSol.toFixed(4)} SOL)</p>
-                                {card.payment.txSignature && (
-                                  <p>🔗 TX: <a href={`https://solscan.io/tx/${card.payment.txSignature}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{card.payment.txSignature.slice(0, 24)}...</a></p>
+                {pendingCards.length > 0 ? (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-4">These users have paid. Create their card on KripiCard dashboard, then paste the Card ID below.</p>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      {pendingCards.map((card) => (
+                        <div key={card.id} className="p-4 rounded-lg bg-card/50 border border-border/30">
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">PENDING</span>
+                                <span className="text-sm font-bold">{card.nameOnCard}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground space-y-0.5">
+                                <p>📧 {card.user?.email || "Unknown"}</p>
+                                <p>💰 Balance: <span className="text-primary font-medium">${card.balance.toFixed(2)}</span></p>
+                                {card.payment && (
+                                  <>
+                                    <p>💳 Paid: ${card.payment.amountUsd.toFixed(2)} ({card.payment.amountSol.toFixed(4)} SOL)</p>
+                                    {card.payment.txSignature && (
+                                      <p>🔗 TX: <a href={`https://solscan.io/tx/${card.payment.txSignature}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{card.payment.txSignature.slice(0, 24)}...</a></p>
+                                    )}
+                                  </>
                                 )}
-                              </>
-                            )}
-                            <p>🕐 {new Date(card.createdAt).toLocaleString()}</p>
+                                <p>🕐 {new Date(card.createdAt).toLocaleString()}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 w-full md:w-auto">
+                              <input
+                                placeholder="KripiCard ID (e.g. C260...)"
+                                value={kripiCardInputs[card.id] || ""}
+                                onChange={(e) => setKripiCardInputs(prev => ({ ...prev, [card.id]: e.target.value }))}
+                                className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none min-w-[200px]"
+                                disabled={assigningCardId === card.id}
+                              />
+                              <Button
+                                onClick={() => assignCard(card.id)}
+                                disabled={assigningCardId === card.id || !kripiCardInputs[card.id]?.trim()}
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
+                              >
+                                {assigningCardId === card.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>✅ Assign</>
+                                )}
+                              </Button>
+                            </div>
                           </div>
+                          {assignMessage?.cardId === card.id && (
+                            <div className={`mt-2 text-sm px-3 py-2 rounded ${
+                              assignMessage.type === "success" 
+                                ? "bg-green-500/10 text-green-400 border border-green-500/30" 
+                                : "bg-red-500/10 text-red-400 border border-red-500/30"
+                            }`}>
+                              {assignMessage.text}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 w-full md:w-auto">
-                          <input
-                            placeholder="KripiCard ID (e.g. C260...)"
-                            value={kripiCardInputs[card.id] || ""}
-                            onChange={(e) => setKripiCardInputs(prev => ({ ...prev, [card.id]: e.target.value }))}
-                            className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none min-w-[200px]"
-                            disabled={assigningCardId === card.id}
-                          />
-                          <Button
-                            onClick={() => assignCard(card.id)}
-                            disabled={assigningCardId === card.id || !kripiCardInputs[card.id]?.trim()}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
-                          >
-                            {assigningCardId === card.id ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <>✅ Assign</>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      {assignMessage?.cardId === card.id && (
-                        <div className={`mt-2 text-sm px-3 py-2 rounded ${
-                          assignMessage.type === "success" 
-                            ? "bg-green-500/10 text-green-400 border border-green-500/30" 
-                            : "bg-red-500/10 text-red-400 border border-red-500/30"
-                        }`}>
-                          {assignMessage.text}
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-sm text-green-400 font-medium">✅ No pending card requests</p>
+                    <p className="text-xs text-muted-foreground mt-1">When a user pays for a new card, it will appear here for you to assign.</p>
+                  </div>
+                )}
               </Card>
-            )}
 
             {/* Volume Breakdown */}
             <div className="grid md:grid-cols-2 gap-4">
