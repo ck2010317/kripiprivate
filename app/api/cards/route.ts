@@ -155,8 +155,23 @@ export async function GET() {
           const errMsg = kripiError instanceof Error ? kripiError.message : "Unknown"
           console.warn(`[Cards] Failed to sync card ${card.id}:`, errMsg)
           
-          // If KripiCard says the card doesn't exist or is cancelled, mark it as CANCELLED
           const lowerMsg = errMsg.toLowerCase()
+          
+          // If KripiCard says card is frozen (can't view details while frozen), mark as FROZEN
+          if (lowerMsg.includes("unfreez") || lowerMsg.includes("frozen") || (lowerMsg.includes("freeze") && lowerMsg.includes("view"))) {
+            console.log(`[Cards] Marking card ${card.id} as FROZEN based on API error: ${errMsg}`)
+            try {
+              await prisma.card.update({
+                where: { id: card.id },
+                data: { status: "FROZEN" },
+              })
+              return { ...card, status: "FROZEN" }
+            } catch {
+              return { ...card, status: "FROZEN" }
+            }
+          }
+          
+          // If KripiCard says the card doesn't exist or is cancelled, mark as CANCELLED
           if (lowerMsg.includes("not found") || lowerMsg.includes("cancel") || lowerMsg.includes("closed") || lowerMsg.includes("terminated") || lowerMsg.includes("invalid card")) {
             console.log(`[Cards] Marking card ${card.id} as CANCELLED based on API error: ${errMsg}`)
             try {
@@ -166,7 +181,6 @@ export async function GET() {
               })
               return { ...card, status: "CANCELLED" }
             } catch {
-              // DB update failed, still return with cancelled status for this request
               return { ...card, status: "CANCELLED" }
             }
           }
