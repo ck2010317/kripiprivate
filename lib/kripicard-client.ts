@@ -139,11 +139,11 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     if (!contentType || !contentType.includes("application/json")) {
       const text = await response.text()
       console.error("[KripiCard] Non-JSON response body:", text.substring(0, 500))
-      // KripiCard returns HTML redirect for amounts below minimum ($10)
+      // KripiCard returned HTML instead of JSON - could be server error, maintenance, or rejection
       if (text.includes("Redirecting") || text.includes("<!DOCTYPE")) {
-        throw new Error("KripiCard rejected the request. The minimum card amount is $10.")
+        throw new Error(`Card provider is temporarily unavailable. Please try again in a few minutes.`)
       }
-      throw new Error(`API returned non-JSON (${response.status}): ${text.substring(0, 100)}`)
+      throw new Error(`Card provider returned an unexpected response (HTTP ${response.status}). Please try again.`)
     }
 
     const data = await response.json()

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { createCard as createKripiCard, getCardDetails } from "@/lib/kripicard-client"
+import { getCardDetails } from "@/lib/kripicard-client"
 
 export async function POST(request: NextRequest) {
   try {
@@ -115,6 +115,11 @@ export async function GET() {
     // Sync balances from KripiCard API in parallel for all cards
     const syncedCards = await Promise.all(
       cards.map(async (card) => {
+        // Skip sync for PENDING cards — they don't have a kripiCardId yet
+        if (card.status === "PENDING" || !card.kripiCardId) {
+          return card
+        }
+
         try {
           const kripiDetails = await getCardDetails(card.kripiCardId)
           

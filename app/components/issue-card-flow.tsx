@@ -390,12 +390,12 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
       <CardDetailsPage
         card={{
           id: issuedCard.id,
-          cardNumber: issuedCard.cardNumber,
-          expiryDate: issuedCard.expiryDate,
-          cvv: issuedCard.cvv,
+          cardNumber: issuedCard.cardNumber || "",
+          expiryDate: issuedCard.expiryDate || "",
+          cvv: issuedCard.cvv || "",
           nameOnCard: issuedCard.nameOnCard,
           balance: issuedCard.balance,
-          status: "ACTIVE",
+          status: (issuedCard.status as "ACTIVE" | "FROZEN" | "CANCELLED" | "PENDING") || "PENDING",
         }}
         onBack={() => onSuccess()}
         onIssueAnother={() => {

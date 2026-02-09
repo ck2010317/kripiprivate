@@ -25,7 +25,7 @@ interface CardDetails {
   cvv: string
   nameOnCard: string
   balance: number
-  status: "ACTIVE" | "FROZEN" | "CANCELLED"
+  status: "ACTIVE" | "FROZEN" | "CANCELLED" | "PENDING"
 }
 
 interface CardDetailsPageProps {
@@ -44,7 +44,7 @@ export function CardDetailsPage({
   const [copied, setCopied] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [cardStatus, setCardStatus] = useState<"ACTIVE" | "FROZEN" | "CANCELLED">(
+  const [cardStatus, setCardStatus] = useState<"ACTIVE" | "FROZEN" | "CANCELLED" | "PENDING">(
     card.status
   )
   const [showTopupModal, setShowTopupModal] = useState(false)
@@ -121,7 +121,43 @@ export function CardDetailsPage({
           </div>
         )}
 
-        <div className="grid md:grid-cols-3 gap-8">
+        {cardStatus === "PENDING" ? (
+          /* PENDING card — show provisioning state */
+          <div className="max-w-lg mx-auto text-center py-16">
+            <div className="w-20 h-20 rounded-full bg-orange-500/10 flex items-center justify-center mx-auto mb-6">
+              <Loader2 className="w-10 h-10 text-orange-400 animate-spin" />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">Your card is being set up</h2>
+            <p className="text-muted-foreground mb-6">
+              Your payment has been received and your card is being provisioned. 
+              This can take up to 4 hours. Card details will appear here once it&apos;s ready.
+            </p>
+            <div className="p-4 rounded-lg bg-card border border-border mb-6">
+              <div className="grid grid-cols-2 gap-4 text-left">
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">CARD HOLDER</p>
+                  <p className="text-sm font-bold mt-1">{card.nameOnCard}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">PREPAID BALANCE</p>
+                  <p className="text-sm font-bold text-primary mt-1">${card.balance.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Button onClick={onBack} variant="outline" className="w-full py-6">
+                <ArrowLeft className="w-5 h-5 mr-2" />
+                Back to Cards
+              </Button>
+              <Button onClick={onIssueAnother} variant="outline" className="w-full py-6">
+                <Plus className="w-5 h-5 mr-2" />
+                Issue Another Card
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Active / Frozen / Cancelled — show full details */
+          <div className="grid md:grid-cols-3 gap-8">
           {/* Card Visual - Large and Beautiful */}
           <div className="md:col-span-2">
             <div className="sticky top-24">
@@ -194,11 +230,13 @@ export function CardDetailsPage({
                       ? "bg-green-500"
                       : cardStatus === "CANCELLED"
                       ? "bg-red-500"
+                      : cardStatus === "PENDING"
+                      ? "bg-orange-400"
                       : "bg-amber-500"
                   }`}
                 ></div>
                 <span className="text-sm font-medium">
-                  {cardStatus === "ACTIVE" ? "Card is Active" : cardStatus === "CANCELLED" ? "Card is Cancelled" : "Card is Frozen"}
+                  {cardStatus === "ACTIVE" ? "Card is Active" : cardStatus === "CANCELLED" ? "Card is Cancelled" : cardStatus === "PENDING" ? "Card is Being Set Up" : "Card is Frozen"}
                 </span>
               </div>
             </div>
@@ -306,7 +344,7 @@ export function CardDetailsPage({
               {/* Topup Button */}
               <Button
                 onClick={() => setShowTopupModal(true)}
-                disabled={cardStatus === "CANCELLED"}
+                disabled={cardStatus === "CANCELLED" || cardStatus === "PENDING"}
                 className="w-full py-6 bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 transition-all disabled:opacity-50"
               >
                 <Plus className="w-5 h-5 mr-2" />
@@ -316,7 +354,7 @@ export function CardDetailsPage({
               {/* Freeze/Unfreeze Button */}
               <Button
                 onClick={handleFreezeUnfreeze}
-                disabled={loading || cardStatus === "CANCELLED"}
+                disabled={loading || cardStatus === "CANCELLED" || cardStatus === "PENDING"}
                 variant={cardStatus === "ACTIVE" ? "outline" : "default"}
                 className="w-full py-6"
               >
@@ -350,6 +388,7 @@ export function CardDetailsPage({
             </div>
           </div>
         </div>
+        )}
       </main>
 
       {/* Topup Modal */}

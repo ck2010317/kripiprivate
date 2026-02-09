@@ -27,10 +27,10 @@ model Card {
   id              String   @id @default(cuid())
   
   // KripiCard API fields
-  kripiCardId     String   @unique  // The card_id from KripiCard API
-  cardNumber      String             // Masked or full card number
-  expiryDate      String
-  cvv             String
+  kripiCardId     String?  @unique  // The card_id from KripiCard API (null for pending cards)
+  cardNumber      String   @default("")  // Masked or full card number
+  expiryDate      String   @default("")
+  cvv             String   @default("")
   nameOnCard      String
   bankBin         String   @default("49387519")
   
@@ -64,6 +64,7 @@ model Session {
 }
 
 enum CardStatus {
+  PENDING
   ACTIVE
   FROZEN
   CANCELLED

@@ -86,6 +86,8 @@ export function CardsDashboard({ onCreateNew }: CardsDashboardProps) {
         return "text-yellow-500"
       case "CANCELLED":
         return "text-red-500"
+      case "PENDING":
+        return "text-orange-400"
       default:
         return "text-gray-500"
     }
@@ -193,64 +195,91 @@ export function CardsDashboard({ onCreateNew }: CardsDashboardProps) {
 
               {/* Card Details */}
               <div className="p-6 space-y-4">
-                {/* Card Number */}
-                <div>
-                  <p className="text-xs text-muted-foreground font-semibold mb-2">CARD NUMBER</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-mono">{formatCardNumber(card.cardNumber)}</p>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => copyToClipboard(card.cardNumber, `card-${card.id}`)}
-                      className="h-8 w-8 p-0"
-                    >
-                      {copied === `card-${card.id}` ? (
-                        <Check className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
+                {card.status === "PENDING" ? (
+                  /* PENDING card — show provisioning message */
+                  <div className="space-y-4">
+                    <div className="text-center py-4">
+                      <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center mx-auto mb-3">
+                        <Loader2 className="w-6 h-6 text-orange-400 animate-spin" />
+                      </div>
+                      <p className="text-sm font-medium text-orange-400">Card is being set up</p>
+                      <p className="text-xs text-muted-foreground mt-1">This can take up to 4 hours. Your card details will appear here once ready.</p>
+                    </div>
 
-                {/* Expiry & CVV */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-semibold mb-1">EXPIRES</p>
-                    <p className="text-sm font-mono">{card.expiryDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-semibold mb-1">CVV</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-mono">
-                        {showCVV[card.id] ? card.cvv : "•••"}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleCVV(card.id)}
-                        className="h-6 w-6 p-0"
-                      >
-                        {showCVV[card.id] ? (
-                          <EyeOff className="w-3 h-3" />
-                        ) : (
-                          <Eye className="w-3 h-3" />
-                        )}
-                      </Button>
+                    {/* Balance */}
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground font-semibold mb-1">PREPAID BALANCE</p>
+                      <p className="text-2xl font-bold text-primary">${card.balance.toFixed(2)}</p>
+                    </div>
+
+                    {/* Created Date */}
+                    <div className="text-xs text-muted-foreground">
+                      Created {formatDate(card.createdAt)}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  /* Normal card — show full details */
+                  <>
+                    {/* Card Number */}
+                    <div>
+                      <p className="text-xs text-muted-foreground font-semibold mb-2">CARD NUMBER</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-mono">{formatCardNumber(card.cardNumber)}</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(card.cardNumber, `card-${card.id}`)}
+                          className="h-8 w-8 p-0"
+                        >
+                          {copied === `card-${card.id}` ? (
+                            <Check className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
 
-                {/* Balance */}
-                <div className="pt-2 border-t border-border">
-                  <p className="text-xs text-muted-foreground font-semibold mb-1">BALANCE</p>
-                  <p className="text-2xl font-bold text-primary">${card.balance.toFixed(2)}</p>
-                </div>
+                    {/* Expiry & CVV */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground font-semibold mb-1">EXPIRES</p>
+                        <p className="text-sm font-mono">{card.expiryDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-semibold mb-1">CVV</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-mono">
+                            {showCVV[card.id] ? card.cvv : "•••"}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleCVV(card.id)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {showCVV[card.id] ? (
+                              <EyeOff className="w-3 h-3" />
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Created Date */}
-                <div className="text-xs text-muted-foreground">
-                  Created {formatDate(card.createdAt)}
-                </div>
+                    {/* Balance */}
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground font-semibold mb-1">BALANCE</p>
+                      <p className="text-2xl font-bold text-primary">${card.balance.toFixed(2)}</p>
+                    </div>
+
+                    {/* Created Date */}
+                    <div className="text-xs text-muted-foreground">
+                      Created {formatDate(card.createdAt)}
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
           ))}

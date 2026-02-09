@@ -10,6 +10,7 @@ export async function GET() {
     // Cards by status
     const activeCards = await prisma.card.count({ where: { status: "ACTIVE" } })
     const frozenCards = await prisma.card.count({ where: { status: "FROZEN" } })
+    const pendingCards = await prisma.card.count({ where: { status: "PENDING" } })
 
     // Total deposit volume (all completed payments - both card issuance and topups)
     const completedPayments = await prisma.payment.findMany({
@@ -84,22 +85,21 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      stats: {
-        totalCards,
-        activeCards,
-        frozenCards,
-        totalUsers,
-        totalDepositVolumeUsd,
-        totalDepositVolumeSol,
-        issuanceVolumeUsd,
-        topupVolumeUsd,
-        totalCardBalance,
-        pendingPayments,
-        todayCards,
-        todayVolumeUsd,
-        totalCompletedPayments: completedPayments.length,
-        recentPayments,
-      },
+      totalCards,
+      activeCards,
+      frozenCards,
+      pendingCards,
+      totalUsers,
+      totalDepositVolumeUsd,
+      totalDepositVolumeSol,
+      issuanceVolumeUsd,
+      topupVolumeUsd,
+      totalCardBalance,
+      pendingPayments,
+      todayCards,
+      todayVolumeUsd,
+      totalCompletedPayments: completedPayments.length,
+      recentPayments,
       timestamp: new Date().toISOString(),
     })
   } catch (error) {

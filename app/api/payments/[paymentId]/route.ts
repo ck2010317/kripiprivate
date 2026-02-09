@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { verifyPayment } from "@/lib/solana-payment"
-import { createCard as createKripiCard, fundCard } from "@/lib/kripicard-client"
+import { fundCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Verify payment and process card
@@ -172,162 +172,59 @@ export async function POST(
 
     // Process based on card type
     if (payment.cardType === "issue") {
-      // For card issuance, use the topupAmount as the card balance
-      // The total we charged includes fees, but the card itself gets only the topup amount
-      const topupAmount = payment.topupAmount || (payment.amountUsd - 5) || 10
+      // Card creation is now manual via KripiCard dashboard
+      // We save a PENDING card and admin will assign the kripiCardId later
+      const topupAmount = payment.topupAmount || payment.amountUsd
       
-      console.log(`[Card Creation] Starting card creation process`)
+      console.log(`[Card Creation] Payment verified, creating PENDING card`)
       console.log(`[Card Creation] Payment ID: ${payment.id}`)
-      console.log(`[Card Creation] Payment topupAmount: ${payment.topupAmount}`)
-      console.log(`[Card Creation] Payment amountUsd: ${payment.amountUsd}`)
-      console.log(`[Card Creation] Calculated topupAmount: ${topupAmount}`)
+      console.log(`[Card Creation] topupAmount: ${topupAmount}`)
       
-      if (topupAmount < 10) {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: "FAILED" },
+      const cardName = (payment.nameOnCard || user.name || "CARDHOLDER").toUpperCase()
+
+      // If there's already a card linked to this payment, return it
+      if (payment.issuedCardId) {
+        const linkedCard = await prisma.card.findUnique({
+          where: { id: payment.issuedCardId },
         })
-        return NextResponse.json(
-          { 
-            error: `Insufficient topup amount to create card. Required: $10, Provided: $${topupAmount.toFixed(2)}`,
-            requiredTopup: 10,
-            providedTopup: topupAmount,
-          },
-          { status: 400 }
-        )
+        if (linkedCard) {
+          console.log(`[Card Creation] Card already linked to payment: ${linkedCard.id}`)
+          return NextResponse.json({
+            success: true,
+            message: linkedCard.status === "PENDING" 
+              ? "Your card is being set up. This can take up to 4 hours. You'll see full details once it's ready." 
+              : "Card already issued",
+            card: {
+              id: linkedCard.id,
+              cardNumber: linkedCard.cardNumber || "",
+              expiryDate: linkedCard.expiryDate || "",
+              cvv: linkedCard.cvv || "",
+              nameOnCard: linkedCard.nameOnCard,
+              balance: linkedCard.balance,
+              status: linkedCard.status,
+            },
+            pending: linkedCard.status === "PENDING",
+          })
+        }
       }
 
-      // Issue new card
+      // Create a PENDING card — admin will assign kripiCardId later
       try {
-        // IMPORTANT: Only send the topup amount to KripiCard, not the fees
-        const cardAmount = topupAmount
-        console.log(`[Card Creation] Card amount to send to Kripi: ${cardAmount}`)
-        console.log(`[Card Creation] Creating card for ${payment.nameOnCard} with $${cardAmount} balance...`)
-        
-        const cardName = (payment.nameOnCard || user.name || "CARDHOLDER").toUpperCase()
-        const cardEmail = user.email || "noemail@example.com"
-        
-        console.log(`[Card Creation] Parameters:`)
-        console.log(`  - Name: ${cardName}`)
-        console.log(`  - Email: ${cardEmail}`)
-        console.log(`  - Amount (topup only, no fees): ${cardAmount}`)
-        console.log(`  - User ID: ${user.id}`)
-        
-        // If there's already a card linked to this payment, return it
-        if (payment.issuedCardId) {
-          const linkedCard = await prisma.card.findUnique({
-            where: { id: payment.issuedCardId },
-          })
-          if (linkedCard) {
-            console.log(`[Card Creation] Card already linked to payment: ${linkedCard.id}`)
-            await prisma.payment.update({
-              where: { id: payment.id },
-              data: { status: "COMPLETED" },
-            })
-            return NextResponse.json({
-              success: true,
-              message: "Card already issued",
-              card: {
-                id: linkedCard.id,
-                cardNumber: linkedCard.cardNumber,
-                expiryDate: linkedCard.expiryDate,
-                cvv: linkedCard.cvv,
-                nameOnCard: linkedCard.nameOnCard,
-                balance: linkedCard.balance,
-                status: linkedCard.status,
-              },
-            })
-          }
-        }
-
-        const kripiResponse = await createKripiCard({
-          amount: cardAmount,
-          name_on_card: cardName,
-          email: cardEmail,
-          bankBin: "49387519",
+        const card = await prisma.card.create({
+          data: {
+            cardNumber: "",
+            expiryDate: "",
+            cvv: "",
+            nameOnCard: cardName,
+            balance: topupAmount,
+            status: "PENDING",
+            userId: user.id,
+          },
         })
 
-        console.log(`[Card Creation] Received KripiCard response:`, JSON.stringify(kripiResponse, null, 2))
+        console.log(`[Card Creation] ✅ PENDING card created in DB: ${card.id}`)
 
-        if (!kripiResponse || !kripiResponse.card_id) {
-          console.error(`[Card Creation] Invalid response - missing card_id. Response:`, kripiResponse)
-          throw new Error("KripiCard API returned invalid response - missing card_id")
-        }
-
-        // CRITICAL: Validate card details are REAL, not dummy values
-        if (!kripiResponse.card_number || kripiResponse.card_number === "****" || kripiResponse.card_number.length < 10) {
-          console.error(`[Card Creation] ❌ Invalid card number from KripiCard:`, kripiResponse.card_number)
-          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid card number. Contact support with card ID: ${kripiResponse.card_id}`)
-        }
-        if (!kripiResponse.cvv || kripiResponse.cvv === "***" || kripiResponse.cvv.length < 3) {
-          console.error(`[Card Creation] ❌ Invalid CVV from KripiCard:`, kripiResponse.cvv)
-          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid CVV. Contact support with card ID: ${kripiResponse.card_id}`)
-        }
-        if (!kripiResponse.expiry_date || kripiResponse.expiry_date === "12/25" || !kripiResponse.expiry_date.includes("/")) {
-          console.error(`[Card Creation] ❌ Invalid expiry from KripiCard:`, kripiResponse.expiry_date)
-          throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid expiry. Contact support with card ID: ${kripiResponse.card_id}`)
-        }
-
-        console.log(`[Card Creation] ✅ Card created on KripiCard: ${kripiResponse.card_id}`)
-        console.log(`[Card Creation] ✅ Card details validated - number: *${kripiResponse.card_number.slice(-4)}, expiry: ${kripiResponse.expiry_date}`)
-
-        // Store card in database - with retry logic
-        let card
-        try {
-          console.log(`[Card Creation] Storing card in database...`)
-          card = await prisma.card.create({
-            data: {
-              kripiCardId: kripiResponse.card_id,
-              cardNumber: kripiResponse.card_number,
-              expiryDate: kripiResponse.expiry_date,
-              cvv: kripiResponse.cvv,
-              nameOnCard: cardName,
-              balance: kripiResponse.balance || cardAmount,
-              userId: user.id,
-            },
-          })
-          console.log(`[Card Creation] ✅ Card stored in database: ${card.id}`)
-        } catch (dbError) {
-          console.error(`[Card Creation] ❌ Database save failed:`, dbError)
-          
-          // Check if it's a duplicate kripiCardId error (card already saved)
-          if (dbError instanceof Error && dbError.message.includes("Unique constraint")) {
-            const existingByKripi = await prisma.card.findUnique({
-              where: { kripiCardId: kripiResponse.card_id },
-            })
-            if (existingByKripi) {
-              console.log(`[Card Creation] Card already exists in DB with kripiCardId: ${kripiResponse.card_id}`)
-              card = existingByKripi
-            }
-          }
-          
-          // If we still don't have a card record, return the KripiCard data directly
-          // so the user at least gets their card details
-          if (!card) {
-            console.error(`[Card Creation] ⚠️ Returning KripiCard data directly (DB save failed)`)
-            await prisma.payment.update({
-              where: { id: payment.id },
-              data: { status: "COMPLETED" },
-            }).catch(() => {})
-            
-            return NextResponse.json({
-              success: true,
-              message: "Card created but database save had an issue. Your card is active.",
-              card: {
-                id: kripiResponse.card_id,
-                cardNumber: kripiResponse.card_number,
-                expiryDate: kripiResponse.expiry_date,
-                cvv: kripiResponse.cvv,
-                nameOnCard: cardName,
-                balance: kripiResponse.balance || cardAmount,
-                status: "ACTIVE",
-              },
-              warning: "Card was created successfully on the provider but could not be saved to your account. Please contact support with card ID: " + kripiResponse.card_id,
-            })
-          }
-        }
-
-        // Update payment as completed
+        // Update payment as completed with card linked
         await prisma.payment.update({
           where: { id: payment.id },
           data: { 
@@ -338,36 +235,25 @@ export async function POST(
 
         return NextResponse.json({
           success: true,
-          message: "Card issued successfully",
+          message: "Payment received! Your card is being set up and will appear in your dashboard once ready. This can take up to 4 hours.",
           card: {
             id: card.id,
-            cardNumber: card.cardNumber,
-            expiryDate: card.expiryDate,
-            cvv: card.cvv,
-            nameOnCard: card.nameOnCard,
-            balance: card.balance,
-            status: card.status,
+            cardNumber: "",
+            expiryDate: "",
+            cvv: "",
+            nameOnCard: cardName,
+            balance: topupAmount,
+            status: "PENDING",
           },
+          pending: true,
         })
       } catch (cardError) {
-        console.error("[Card Creation] ❌ Exception in card creation:", cardError)
-        if (cardError instanceof Error) {
-          console.error("[Card Creation] Error message:", cardError.message)
-          console.error("[Card Creation] Error stack:", cardError.stack)
-        }
-        console.error("[Card Creation] Full error object:", JSON.stringify(cardError, null, 2))
-        
+        console.error("[Card Creation] ❌ Failed to create pending card:", cardError)
         const errorMessage = cardError instanceof Error ? cardError.message : JSON.stringify(cardError)
         
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: "FAILED" },
-        })
-        
-        // Pass through the raw error from KripiCard so we can debug real issues
         return NextResponse.json(
-          { error: errorMessage, timestamp: new Date().toISOString() },
-          { status: 400 }
+          { error: "Payment received but failed to create card record. Please contact support.", details: errorMessage },
+          { status: 500 }
         )
       }
     } else if ((payment.cardType === "topup" || payment.cardType === "fund") && payment.targetCardId) {
