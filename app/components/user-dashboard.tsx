@@ -30,7 +30,7 @@ interface CardData {
   cvv: string
   nameOnCard: string
   balance: number
-  status: "ACTIVE" | "FROZEN" | "CANCELLED"
+  status: "ACTIVE" | "FROZEN" | "CANCELLED" | "PENDING"
   createdAt: string
 }
 
@@ -230,7 +230,47 @@ export function UserDashboard({ onBack, onCreateCard, onAdmin }: UserDashboardPr
                   card.status === "FROZEN" ? "opacity-75" : ""
                 }`}
               >
-                {/* Card Visual */}
+                {card.status === "PENDING" ? (
+                  /* PENDING card — show provisioning state */
+                  <>
+                    <div className="p-6 bg-gradient-to-br from-orange-500/10 via-card to-yellow-500/5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">CARDHOLDER</p>
+                          <p className="font-semibold">{card.nameOnCard}</p>
+                        </div>
+                        <span className="px-2 py-1 text-xs bg-orange-500/20 text-orange-400 rounded-full flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Pending
+                        </span>
+                      </div>
+                      <div className="text-center py-6">
+                        <Loader2 className="w-10 h-10 text-orange-400 animate-spin mx-auto mb-3" />
+                        <p className="text-sm font-medium text-orange-400">Your card is being set up</p>
+                        <p className="text-xs text-muted-foreground mt-2">This can take up to 4 hours.<br/>Card details will appear here once ready.</p>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-xs text-muted-foreground">BALANCE</p>
+                          <p className="font-semibold text-primary">${card.balance.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-4 border-t border-border/50">
+                      <Button
+                        onClick={() => fetchCards()}
+                        variant="outline"
+                        className="w-full"
+                        size="sm"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Check Status
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  /* ACTIVE / FROZEN / CANCELLED card — show full details */
+                  <>
                 <div className="p-6 bg-gradient-to-br from-primary/20 via-card to-secondary/10">
                   <div className="flex justify-between items-start mb-8">
                     <div>
@@ -362,6 +402,8 @@ export function UserDashboard({ onBack, onCreateCard, onAdmin }: UserDashboardPr
                     Fund Card
                   </Button>
                 </div>
+                  </>
+                )}
               </Card>
             ))}
           </div>
