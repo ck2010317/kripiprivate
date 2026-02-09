@@ -133,7 +133,8 @@ export async function GET() {
             updates.cvv = kripiDetails.cvv
           }
           if (kripiDetails.status) {
-            const newStatus = kripiDetails.status === "ACTIVE" ? "ACTIVE" : kripiDetails.status === "FROZEN" ? "FROZEN" : card.status
+            const statusMap: Record<string, string> = { "ACTIVE": "ACTIVE", "FROZEN": "FROZEN", "CANCELLED": "CANCELLED" }
+            const newStatus = statusMap[kripiDetails.status] || card.status
             if (newStatus !== card.status) {
               updates.status = newStatus
             }
@@ -151,8 +152,25 @@ export async function GET() {
           
           return card
         } catch (kripiError) {
-          // If API call fails for one card, return DB data
-          console.warn(`[Cards] Failed to sync card ${card.id}:`, kripiError instanceof Error ? kripiError.message : "Unknown")
+          const errMsg = kripiError instanceof Error ? kripiError.message : "Unknown"
+          console.warn(`[Cards] Failed to sync card ${card.id}:`, errMsg)
+          
+          // If KripiCard says the card doesn't exist or is cancelled, mark it as CANCELLED
+          const lowerMsg = errMsg.toLowerCase()
+          if (lowerMsg.includes("not found") || lowerMsg.includes("cancel") || lowerMsg.includes("closed") || lowerMsg.includes("terminated") || lowerMsg.includes("invalid card")) {
+            console.log(`[Cards] Marking card ${card.id} as CANCELLED based on API error: ${errMsg}`)
+            try {
+              await prisma.card.update({
+                where: { id: card.id },
+                data: { status: "CANCELLED" },
+              })
+              return { ...card, status: "CANCELLED" }
+            } catch {
+              // DB update failed, still return with cancelled status for this request
+              return { ...card, status: "CANCELLED" }
+            }
+          }
+          
           return card
         }
       })

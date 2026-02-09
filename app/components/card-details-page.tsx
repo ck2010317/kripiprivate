@@ -44,8 +44,8 @@ export function CardDetailsPage({
   const [copied, setCopied] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [cardStatus, setCardStatus] = useState<"ACTIVE" | "FROZEN">(
-    card.status === "CANCELLED" ? "ACTIVE" : card.status
+  const [cardStatus, setCardStatus] = useState<"ACTIVE" | "FROZEN" | "CANCELLED">(
+    card.status
   )
   const [showTopupModal, setShowTopupModal] = useState(false)
 
@@ -192,11 +192,13 @@ export function CardDetailsPage({
                   className={`w-2 h-2 rounded-full ${
                     cardStatus === "ACTIVE"
                       ? "bg-green-500"
+                      : cardStatus === "CANCELLED"
+                      ? "bg-red-500"
                       : "bg-amber-500"
                   }`}
                 ></div>
                 <span className="text-sm font-medium">
-                  {cardStatus === "ACTIVE" ? "Card is Active" : "Card is Frozen"}
+                  {cardStatus === "ACTIVE" ? "Card is Active" : cardStatus === "CANCELLED" ? "Card is Cancelled" : "Card is Frozen"}
                 </span>
               </div>
             </div>
@@ -294,10 +296,18 @@ export function CardDetailsPage({
 
             {/* Action Buttons */}
             <div className="space-y-3">
+              {/* Cancelled Notice */}
+              {cardStatus === "CANCELLED" && (
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
+                  <p className="text-sm font-medium text-red-500">This card has been cancelled and can no longer be used.</p>
+                </div>
+              )}
+
               {/* Topup Button */}
               <Button
                 onClick={() => setShowTopupModal(true)}
-                className="w-full py-6 bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 transition-all"
+                disabled={cardStatus === "CANCELLED"}
+                className="w-full py-6 bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 transition-all disabled:opacity-50"
               >
                 <Plus className="w-5 h-5 mr-2" />
                 Add Balance
@@ -306,7 +316,7 @@ export function CardDetailsPage({
               {/* Freeze/Unfreeze Button */}
               <Button
                 onClick={handleFreezeUnfreeze}
-                disabled={loading}
+                disabled={loading || cardStatus === "CANCELLED"}
                 variant={cardStatus === "ACTIVE" ? "outline" : "default"}
                 className="w-full py-6"
               >
