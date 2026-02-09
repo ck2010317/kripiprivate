@@ -1031,6 +1031,7 @@ interface AdminStats {
   totalCards: number
   activeCards: number
   frozenCards: number
+  pendingCards: number
   totalUsers: number
   totalDepositVolumeUsd: number
   totalDepositVolumeSol: number
@@ -1052,11 +1053,31 @@ interface AdminStats {
   }[]
 }
 
+interface PendingCardInfo {
+  id: string
+  nameOnCard: string
+  balance: number
+  createdAt: string
+  user: { id: string; email: string; name: string | null }
+  payment: {
+    id: string
+    amountUsd: number
+    amountSol: number
+    topupAmount: number | null
+    txSignature: string | null
+    createdAt: string
+  } | null
+}
+
 function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEmail: string }) {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [pendingCards, setPendingCards] = useState<PendingCardInfo[]>([])
+  const [kripiCardInputs, setKripiCardInputs] = useState<Record<string, string>>({})
+  const [assigningCardId, setAssigningCardId] = useState<string | null>(null)
+  const [assignMessage, setAssignMessage] = useState<{ cardId: string; type: "success" | "error"; text: string } | null>(null)
 
   const ADMIN_EMAILS = ["shaann950@gmail.com"]
   const isAdmin = ADMIN_EMAILS.includes(userEmail)
@@ -1066,7 +1087,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
       const res = await fetch("/api/admin/stats")
       const data = await res.json()
       if (data.success) {
-        setStats(data.stats)
+        setStats(data)
         setLastUpdated(new Date())
       }
     } catch (err) {
@@ -1076,14 +1097,54 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
     }
   }
 
+  const fetchPendingCards = async () => {
+    try {
+      const res = await fetch("/api/admin/assign-card")
+      const data = await res.json()
+      setPendingCards(data.cards || [])
+    } catch (err) {
+      console.error("Failed to fetch pending cards:", err)
+    }
+  }
+
+  const assignCard = async (cardId: string) => {
+    const kripiCardId = kripiCardInputs[cardId]?.trim()
+    if (!kripiCardId) {
+      setAssignMessage({ cardId, type: "error", text: "Please enter a KripiCard ID" })
+      return
+    }
+    setAssigningCardId(cardId)
+    setAssignMessage(null)
+    try {
+      const res = await fetch("/api/admin/assign-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId, kripiCardId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setAssignMessage({ cardId, type: "error", text: data.error || "Failed to assign" })
+        return
+      }
+      setAssignMessage({ cardId, type: "success", text: `✅ Assigned! Status: ${data.card?.status}` })
+      setKripiCardInputs(prev => { const n = { ...prev }; delete n[cardId]; return n })
+      setTimeout(() => { fetchPendingCards(); fetchStats(); setAssignMessage(null) }, 2000)
+    } catch {
+      setAssignMessage({ cardId, type: "error", text: "Network error" })
+    } finally {
+      setAssigningCardId(null)
+    }
+  }
+
   useEffect(() => {
     if (!isAdmin) return
     fetchStats()
+    fetchPendingCards()
   }, [isAdmin])
 
   useEffect(() => {
     if (!isAdmin || !autoRefresh) return
-    const interval = setInterval(fetchStats, 10000) // every 10 seconds
+    const interval = setInterval(() => { fetchStats(); fetchPendingCards() }, 10000)
     return () => clearInterval(interval)
   }, [isAdmin, autoRefresh])
 
@@ -1171,7 +1232,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                 </div>
                 <p className="text-3xl font-bold text-purple-400">{stats.totalCards}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {stats.activeCards} active · {stats.frozenCards} frozen
+                  {stats.activeCards} active · {stats.frozenCards} frozen{stats.pendingCards > 0 ? ` · ${stats.pendingCards} pending` : ""}
                 </p>
               </Card>
 
@@ -1252,6 +1313,86 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                 </div>
               )}
             </Card>
+
+            {/* Pending Card Assignments */}
+            {pendingCards.length > 0 && (
+              <Card className="p-6 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-yellow-500/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-yellow-400" />
+                      <h2 className="text-lg font-bold">Pending Card Assignments ({pendingCards.length})</h2>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open("https://kripicard.com", "_blank")}
+                    className="text-xs"
+                  >
+                    Open KripiCard Dashboard →
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">These users have paid. Create their card on KripiCard dashboard, then paste the Card ID below.</p>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {pendingCards.map((card) => (
+                    <div key={card.id} className="p-4 rounded-lg bg-card/50 border border-border/30">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">PENDING</span>
+                            <span className="text-sm font-bold">{card.nameOnCard}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            <p>📧 {card.user?.email || "Unknown"}</p>
+                            <p>💰 Balance: <span className="text-primary font-medium">${card.balance.toFixed(2)}</span></p>
+                            {card.payment && (
+                              <>
+                                <p>💳 Paid: ${card.payment.amountUsd.toFixed(2)} ({card.payment.amountSol.toFixed(4)} SOL)</p>
+                                {card.payment.txSignature && (
+                                  <p>🔗 TX: <a href={`https://solscan.io/tx/${card.payment.txSignature}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{card.payment.txSignature.slice(0, 24)}...</a></p>
+                                )}
+                              </>
+                            )}
+                            <p>🕐 {new Date(card.createdAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                          <input
+                            placeholder="KripiCard ID (e.g. C260...)"
+                            value={kripiCardInputs[card.id] || ""}
+                            onChange={(e) => setKripiCardInputs(prev => ({ ...prev, [card.id]: e.target.value }))}
+                            className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none min-w-[200px]"
+                            disabled={assigningCardId === card.id}
+                          />
+                          <Button
+                            onClick={() => assignCard(card.id)}
+                            disabled={assigningCardId === card.id || !kripiCardInputs[card.id]?.trim()}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
+                          >
+                            {assigningCardId === card.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>✅ Assign</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      {assignMessage?.cardId === card.id && (
+                        <div className={`mt-2 text-sm px-3 py-2 rounded ${
+                          assignMessage.type === "success" 
+                            ? "bg-green-500/10 text-green-400 border border-green-500/30" 
+                            : "bg-red-500/10 text-red-400 border border-red-500/30"
+                        }`}>
+                          {assignMessage.text}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* Volume Breakdown */}
             <div className="grid md:grid-cols-2 gap-4">
