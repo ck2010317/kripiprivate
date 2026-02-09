@@ -1087,7 +1087,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
       const res = await fetch("/api/admin/stats")
       const data = await res.json()
       if (data.success) {
-        setStats(data)
+        setStats(data.stats)
         setLastUpdated(new Date())
       }
     } catch (err) {
