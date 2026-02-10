@@ -230,13 +230,11 @@ export function CardDetailsPage({
                       ? "bg-green-500"
                       : cardStatus === "CANCELLED"
                       ? "bg-red-500"
-                      : cardStatus === "PENDING"
-                      ? "bg-orange-400"
                       : "bg-amber-500"
                   }`}
                 ></div>
                 <span className="text-sm font-medium">
-                  {cardStatus === "ACTIVE" ? "Card is Active" : cardStatus === "CANCELLED" ? "Card is Cancelled" : cardStatus === "PENDING" ? "Card is Being Set Up" : "Card is Frozen"}
+                  {cardStatus === "ACTIVE" ? "Card is Active" : cardStatus === "CANCELLED" ? "Card is Cancelled" : "Card is Frozen"}
                 </span>
               </div>
             </div>
@@ -344,7 +342,7 @@ export function CardDetailsPage({
               {/* Topup Button */}
               <Button
                 onClick={() => setShowTopupModal(true)}
-                disabled={cardStatus === "CANCELLED" || cardStatus === "PENDING"}
+                disabled={cardStatus === "CANCELLED"}
                 className="w-full py-6 bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 transition-all disabled:opacity-50"
               >
                 <Plus className="w-5 h-5 mr-2" />
@@ -354,7 +352,7 @@ export function CardDetailsPage({
               {/* Freeze/Unfreeze Button */}
               <Button
                 onClick={handleFreezeUnfreeze}
-                disabled={loading || cardStatus === "CANCELLED" || cardStatus === "PENDING"}
+                disabled={loading || cardStatus === "CANCELLED"}
                 variant={cardStatus === "ACTIVE" ? "outline" : "default"}
                 className="w-full py-6"
               >
