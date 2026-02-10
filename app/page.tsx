@@ -345,6 +345,14 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
               Private Transfer
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
+            <Button
+              size="lg"
+              className="bg-card/50 hover:bg-card border border-primary/30 text-foreground group font-semibold transition-all duration-300 backdrop-blur hover:shadow-lg hover:shadow-primary/20"
+              onClick={() => window.open("/shop", "_blank")}
+            >
+              PrivateShop
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
           </div>
 
           {/* Feature grid */}
