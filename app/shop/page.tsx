@@ -18,6 +18,7 @@ interface Product {
   badge?: string
   gradient: string
   accent: string
+  image: string
 }
 
 interface CartItem {
@@ -53,6 +54,7 @@ const PRODUCTS: Product[] = [
     badge: "BESTSELLER",
     gradient: "from-gray-900 via-gray-800 to-gray-900",
     accent: "#6366f1",
+    image: "https://images.unsplash.com/photo-1544923246-77307dd270c9?w=800&q=80&fit=crop",
   },
   {
     id: "m-phantom-bomber",
@@ -67,6 +69,7 @@ const PRODUCTS: Product[] = [
     reviews: 93,
     gradient: "from-emerald-950 via-gray-900 to-emerald-950",
     accent: "#10b981",
+    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&q=80&fit=crop",
   },
   {
     id: "m-stealth-parka",
@@ -82,6 +85,7 @@ const PRODUCTS: Product[] = [
     badge: "PREMIUM",
     gradient: "from-slate-900 via-slate-800 to-slate-900",
     accent: "#8b5cf6",
+    image: "https://images.unsplash.com/photo-1608063615781-e2ef8c73d114?w=800&q=80&fit=crop",
   },
   {
     id: "m-onyx-puffer",
@@ -96,6 +100,7 @@ const PRODUCTS: Product[] = [
     reviews: 84,
     gradient: "from-neutral-900 via-neutral-800 to-neutral-900",
     accent: "#f59e0b",
+    image: "https://images.unsplash.com/photo-1611312449408-fcece27cdbb7?w=800&q=80&fit=crop",
   },
   {
     id: "m-shadow-windbreaker",
@@ -110,6 +115,7 @@ const PRODUCTS: Product[] = [
     reviews: 72,
     gradient: "from-blue-950 via-gray-900 to-blue-950",
     accent: "#3b82f6",
+    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80&fit=crop",
   },
   {
     id: "m-noir-leather",
@@ -125,6 +131,7 @@ const PRODUCTS: Product[] = [
     badge: "ICONIC",
     gradient: "from-amber-950 via-gray-900 to-amber-950",
     accent: "#d97706",
+    image: "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800&q=80&fit=crop",
   },
   {
     id: "m-blizzard-puffer",
@@ -139,6 +146,7 @@ const PRODUCTS: Product[] = [
     reviews: 118,
     gradient: "from-indigo-950 via-gray-900 to-indigo-950",
     accent: "#818cf8",
+    image: "https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=800&q=80&fit=crop",
   },
   {
     id: "m-carbon-shell",
@@ -153,6 +161,7 @@ const PRODUCTS: Product[] = [
     reviews: 89,
     gradient: "from-cyan-950 via-gray-900 to-cyan-950",
     accent: "#06b6d4",
+    image: "https://images.unsplash.com/photo-1495105787522-5334e3ffa0ef?w=800&q=80&fit=crop",
   },
   {
     id: "m-eclipse-vest",
@@ -167,6 +176,7 @@ const PRODUCTS: Product[] = [
     reviews: 67,
     gradient: "from-stone-900 via-stone-800 to-stone-900",
     accent: "#a78bfa",
+    image: "https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?w=800&q=80&fit=crop",
   },
   {
     id: "m-vortex-puffer",
@@ -182,6 +192,7 @@ const PRODUCTS: Product[] = [
     badge: "NEW",
     gradient: "from-green-950 via-gray-900 to-green-950",
     accent: "#22c55e",
+    image: "https://images.unsplash.com/photo-1548883354-7622d03aca27?w=800&q=80&fit=crop",
   },
 
   // WOMEN'S COLLECTION
@@ -199,6 +210,7 @@ const PRODUCTS: Product[] = [
     badge: "BESTSELLER",
     gradient: "from-purple-950 via-gray-900 to-purple-950",
     accent: "#c084fc",
+    image: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=800&q=80&fit=crop",
   },
   {
     id: "w-velvet-bomber",
@@ -213,6 +225,7 @@ const PRODUCTS: Product[] = [
     reviews: 109,
     gradient: "from-fuchsia-950 via-gray-900 to-fuchsia-950",
     accent: "#e879f9",
+    image: "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=800&q=80&fit=crop",
   },
   {
     id: "w-glacier-parka",
@@ -228,6 +241,7 @@ const PRODUCTS: Product[] = [
     badge: "PREMIUM",
     gradient: "from-rose-950 via-gray-900 to-rose-950",
     accent: "#fb7185",
+    image: "https://images.unsplash.com/photo-1515616421690-894067828230?w=800&q=80&fit=crop",
   },
   {
     id: "w-noir-trench",
@@ -243,6 +257,7 @@ const PRODUCTS: Product[] = [
     badge: "ICONIC",
     gradient: "from-red-950 via-gray-900 to-red-950",
     accent: "#ef4444",
+    image: "https://images.unsplash.com/photo-1521223890158-f9f7c3d5d504?w=800&q=80&fit=crop",
   },
   {
     id: "w-cloud-puffer",
@@ -257,6 +272,7 @@ const PRODUCTS: Product[] = [
     reviews: 132,
     gradient: "from-sky-950 via-gray-900 to-sky-950",
     accent: "#38bdf8",
+    image: "https://images.unsplash.com/photo-1609803384069-19f3e5a70e75?w=800&q=80&fit=crop",
   },
   {
     id: "w-midnight-windbreaker",
@@ -271,6 +287,7 @@ const PRODUCTS: Product[] = [
     reviews: 76,
     gradient: "from-pink-950 via-gray-900 to-pink-950",
     accent: "#f472b6",
+    image: "https://images.unsplash.com/photo-1434389677669-e08b4cda3a44?w=800&q=80&fit=crop",
   },
   {
     id: "w-frost-vest",
@@ -285,6 +302,7 @@ const PRODUCTS: Product[] = [
     reviews: 58,
     gradient: "from-teal-950 via-gray-900 to-teal-950",
     accent: "#2dd4bf",
+    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&q=80&fit=crop&crop=top",
   },
   {
     id: "w-shadow-shearling",
@@ -300,6 +318,7 @@ const PRODUCTS: Product[] = [
     badge: "ARTISAN",
     gradient: "from-orange-950 via-gray-900 to-orange-950",
     accent: "#fb923c",
+    image: "https://images.unsplash.com/photo-1559551409-dadc959f76b8?w=800&q=80&fit=crop",
   },
   {
     id: "w-tempest-puffer",
@@ -315,6 +334,7 @@ const PRODUCTS: Product[] = [
     badge: "NEW",
     gradient: "from-violet-950 via-gray-900 to-violet-950",
     accent: "#a78bfa",
+    image: "https://images.unsplash.com/photo-1606834464471-97fa5d3689b5?w=800&q=80&fit=crop",
   },
   {
     id: "w-aether-cocoon",
@@ -329,136 +349,55 @@ const PRODUCTS: Product[] = [
     reviews: 92,
     gradient: "from-yellow-950 via-gray-900 to-yellow-950",
     accent: "#fbbf24",
+    image: "https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=800&q=80&fit=crop",
   },
 ]
 
 const SHOP_WALLET = "9YJAc6bsLoB5BU22ZJQfo1pn7q7R6A2U5KsHFby7FcsD"
 
-// ─── PRODUCT IMAGE COMPONENT (SVG-based) ────────────────────────────────────
+// ─── PRODUCT IMAGE COMPONENT ─────────────────────────────────────────────────
 function ProductImage({ product, className = "" }: { product: Product; className?: string }) {
-  // Generate a unique but deterministic visual for each product
-  const hash = product.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
-  const isWomen = product.category === "women"
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
   
   return (
     <div className={`relative overflow-hidden bg-gradient-to-br ${product.gradient} ${className}`}>
-      {/* Abstract jacket silhouette */}
-      <svg viewBox="0 0 400 500" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id={`grad-${product.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={product.accent} stopOpacity="0.3" />
-            <stop offset="50%" stopColor={product.accent} stopOpacity="0.1" />
-            <stop offset="100%" stopColor={product.accent} stopOpacity="0.25" />
-          </linearGradient>
-          <radialGradient id={`glow-${product.id}`} cx="50%" cy="40%" r="50%">
-            <stop offset="0%" stopColor={product.accent} stopOpacity="0.2" />
-            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-          </radialGradient>
-          <filter id={`shadow-${product.id}`}>
-            <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor={product.accent} floodOpacity="0.3" />
-          </filter>
-        </defs>
+      {/* Loading skeleton */}
+      {!loaded && !error && (
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-muted/30 to-muted/10" />
+      )}
+      
+      {/* Real product photo */}
+      {!error ? (
+        <img
+          src={product.image}
+          alt={product.name}
+          className={`w-full h-full object-cover transition-all duration-700 group-hover:scale-105 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => setError(true)}
+        />
+      ) : (
+        /* Fallback gradient with text */
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center px-4">
+            <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: product.accent + '20' }}>
+              <Package className="w-8 h-8" style={{ color: product.accent }} />
+            </div>
+            <p className="text-sm font-semibold text-white/80">{product.name}</p>
+          </div>
+        </div>
+      )}
 
-        {/* Background glow */}
-        <circle cx="200" cy="200" r="180" fill={`url(#glow-${product.id})`} />
-
-        {/* Hanger */}
-        <path d="M180 60 Q200 40 220 60" fill="none" stroke={product.accent} strokeWidth="2" opacity="0.4" />
-        <line x1="200" y1="50" x2="200" y2="85" stroke={product.accent} strokeWidth="1.5" opacity="0.3" />
-
-        {/* Jacket body */}
-        {isWomen ? (
-          // Women's jacket silhouette (more fitted/curved)
-          <g filter={`url(#shadow-${product.id})`}>
-            {/* Collar */}
-            <path d="M165 90 Q175 80 200 85 Q225 80 235 90 L230 110 Q215 100 200 102 Q185 100 170 110 Z" 
-              fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.8" />
-            {/* Body */}
-            <path d={`M170 110 L155 130 L${product.type === "Puffer" ? "140" : "148"} ${product.type === "Parka" || product.type === "Coat" ? "380" : product.type === "Vest" ? "280" : "320"} 
-              Q170 ${product.type === "Parka" || product.type === "Coat" ? "395" : "340"} 200 ${product.type === "Parka" || product.type === "Coat" ? "400" : product.type === "Vest" ? "290" : "350"} 
-              Q230 ${product.type === "Parka" || product.type === "Coat" ? "395" : "340"} ${product.type === "Puffer" ? "260" : "252"} ${product.type === "Parka" || product.type === "Coat" ? "380" : product.type === "Vest" ? "280" : "320"} 
-              L245 130 L230 110 Q215 115 200 118 Q185 115 170 110 Z`}
-              fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1.5" opacity="0.7" />
-            {/* Center zip */}
-            <line x1="200" y1="110" x2="200" y2={product.type === "Parka" || product.type === "Coat" ? "390" : product.type === "Vest" ? "285" : "340"} 
-              stroke={product.accent} strokeWidth="1" opacity="0.4" strokeDasharray="4 4" />
-            {/* Waist detail for fitted styles */}
-            {(product.type === "Puffer" || product.type === "Parka" || product.type === "Coat") && (
-              <path d={`M${product.type === "Puffer" ? "148" : "150"} 220 Q175 210 200 212 Q225 210 ${product.type === "Puffer" ? "252" : "250"} 220`} 
-                fill="none" stroke={product.accent} strokeWidth="1" opacity="0.3" />
-            )}
-            {/* Sleeves (skip for vest) */}
-            {product.type !== "Vest" && (
-              <>
-                <path d="M155 130 L110 230 L125 235 L163 145" fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.6" />
-                <path d="M245 130 L290 230 L275 235 L237 145" fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.6" />
-              </>
-            )}
-            {/* Quilting lines for puffers */}
-            {product.type === "Puffer" && (
-              <g opacity="0.25" stroke={product.accent} strokeWidth="0.8">
-                {[150, 180, 210, 240, 270, 300].map((y, i) => (
-                  <path key={i} d={`M${148 + (y - 130) * 0.05} ${y} Q200 ${y - 5 + (hash % 10)} ${252 - (y - 130) * 0.05} ${y}`} fill="none" />
-                ))}
-              </g>
-            )}
-          </g>
-        ) : (
-          // Men's jacket silhouette (broader, boxier)
-          <g filter={`url(#shadow-${product.id})`}>
-            {/* Collar */}
-            <path d="M155 90 Q170 75 200 82 Q230 75 245 90 L240 115 Q220 105 200 108 Q180 105 160 115 Z" 
-              fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.8" />
-            {/* Body */}
-            <path d={`M160 115 L145 135 L${product.type === "Puffer" ? "135" : "142"} ${product.type === "Parka" ? "380" : product.type === "Vest" ? "290" : "330"} 
-              Q172 ${product.type === "Parka" ? "390" : "345"} 200 ${product.type === "Parka" ? "395" : product.type === "Vest" ? "300" : "350"} 
-              Q228 ${product.type === "Parka" ? "390" : "345"} ${product.type === "Puffer" ? "265" : "258"} ${product.type === "Parka" ? "380" : product.type === "Vest" ? "290" : "330"} 
-              L255 135 L240 115 Q220 120 200 123 Q180 120 160 115 Z`}
-              fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1.5" opacity="0.7" />
-            {/* Center zip */}
-            <line x1="200" y1="115" x2="200" y2={product.type === "Parka" ? "385" : product.type === "Vest" ? "295" : "345"} 
-              stroke={product.accent} strokeWidth="1" opacity="0.4" strokeDasharray="4 4" />
-            {/* Pockets */}
-            <rect x="158" y="230" width="35" height="30" rx="3" fill="none" stroke={product.accent} strokeWidth="0.8" opacity="0.3" />
-            <rect x="207" y="230" width="35" height="30" rx="3" fill="none" stroke={product.accent} strokeWidth="0.8" opacity="0.3" />
-            {/* Sleeves (skip for vest) */}
-            {product.type !== "Vest" && (
-              <>
-                <path d="M145 135 L95 245 L115 252 L155 150" fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.6" />
-                <path d="M255 135 L305 245 L285 252 L245 150" fill={`url(#grad-${product.id})`} stroke={product.accent} strokeWidth="1" opacity="0.6" />
-              </>
-            )}
-            {/* Quilting lines for puffers */}
-            {product.type === "Puffer" && (
-              <g opacity="0.25" stroke={product.accent} strokeWidth="0.8">
-                {[155, 190, 225, 260, 295].map((y, i) => (
-                  <path key={i} d={`M${140 + (y - 135) * 0.02} ${y} Q200 ${y - 4 + (hash % 8)} ${260 - (y - 135) * 0.02} ${y}`} fill="none" />
-                ))}
-              </g>
-            )}
-          </g>
-        )}
-
-        {/* Decorative dots */}
-        {[...Array(5)].map((_, i) => (
-          <circle 
-            key={i}
-            cx={80 + i * 70 + (hash * (i + 1)) % 30} 
-            cy={380 + (hash * (i + 2)) % 40} 
-            r={2 + (hash * i) % 3} 
-            fill={product.accent} 
-            opacity={0.15 + (i * 0.05)} 
-          />
-        ))}
-      </svg>
-
-      {/* Overlay shimmer */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+      {/* Gradient overlay for text readability */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10" />
       
       {/* Badge */}
       {product.badge && (
         <div 
-          className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider text-white"
+          className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider text-white shadow-lg"
           style={{ backgroundColor: product.accent }}
         >
           {product.badge}
