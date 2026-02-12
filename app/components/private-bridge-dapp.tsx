@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,203 +13,252 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
+  LogOut,
+  Wallet as WalletIcon,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const SQUID_API_URL = "https://v2.api.squidrouter.com"
+const SQUID_API_URL = "https://v2.api.squidrouter.com/v2"
 const INTEGRATOR_ID = "privatebridge-c0f6657e-1f07-4dfe-a743-7f0721e7cf57"
 
 interface RouteData {
   route: {
     id: string
-    routeType: string
     fromChain: string
     toChain: string
-    fromToken: {
-      address: string
-      chainId: number
-      decimals: number
-      name: string
-      symbol: string
-    }
-    toToken: {
-      address: string
-      chainId: number
-      decimals: number
-      name: string
-      symbol: string
-    }
     fromAmount: string
     toAmount: string
     exchangeRate: string
     priceImpact: string
     slippage: string
     minReceived: string
-    feeCosts: Array<{
+    transactionRequest?: {
+      target: string
+      data: string
+      value: string
+      gasLimit: string
+      gasPrice: string
+    }
+    feeCosts?: Array<{
       name: string
-      description: string
       percentage: string
-      token: {
-        address: string
-        chainId: number
-        decimals: number
-        name: string
-        symbol: string
-      }
       amount: string
     }>
-    gasCosts: Array<{
-      type: string
-      token: {
-        address: string
-        chainId: number
-        decimals: number
-        name: string
-        symbol: string
-      }
-      amount: string
-      amountUSD: string
-    }>
-  }
-  transactionRequest?: {
-    data: string
-    to: string
-    from: string
-    value: string
-    chainId: number
-    gasPrice: string
-    gasLimit: string
   }
 }
 
-interface ChainData {
+interface WalletInfo {
+  address: string
   chainId: number
-  chainName: string
-  chainNativeContracts: {
-    wrappedNativeToken: string
-    multicallContract: string
-    usdcContract: string
-  }
+  balance: string
 }
 
 export function PrivateBridge() {
+  // Wallet state
+  const [wallet, setWallet] = useState<WalletInfo | null>(null)
+  const [connecting, setConnecting] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+
+  // Bridge state
   const [fromChain, setFromChain] = useState("1") // Ethereum
-  const [toChain, setToChain] = useState("101") // Solana
+  const [toChain, setToChain] = useState("8453") // Base
   const [fromAmount, setFromAmount] = useState("")
   const [toAmount, setToAmount] = useState("")
   const [loading, setLoading] = useState(false)
-  const [quoting, setQuoting] = useState(false)
   const [quote, setQuote] = useState<RouteData | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [chains, setChains] = useState<ChainData[]>([])
+  const [quoteTimestamp, setQuoteTimestamp] = useState<number>(0)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
 
-  // Fetch supported chains
-  useEffect(() => {
-    const fetchChains = async () => {
-      try {
-        const response = await fetch(`${SQUID_API_URL}/chains`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-        if (response.ok) {
-          const data = await response.json()
-          setChains(data.chains || [])
-        }
-      } catch (err) {
-        console.error("Failed to fetch chains:", err)
+  const chains = [
+    { id: "1", name: "Ethereum", symbol: "ETH" },
+    { id: "137", name: "Polygon", symbol: "MATIC" },
+    { id: "42161", name: "Arbitrum", symbol: "ETH" },
+    { id: "10", name: "Optimism", symbol: "ETH" },
+    { id: "8453", name: "Base", symbol: "ETH" },
+    { id: "56", name: "BNB Chain", symbol: "BNB" },
+  ]
+
+  // Connect wallet
+  const connectWallet = useCallback(async () => {
+    setConnecting(true)
+    setWalletError(null)
+
+    try {
+      // Check if window.ethereum exists
+      if (!window.ethereum) {
+        throw new Error("MetaMask not installed. Please install MetaMask.")
       }
+
+      // Request account access
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      })
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from wallet")
+      }
+
+      // Get chain ID
+      const chainIdHex = await window.ethereum.request({
+        method: "eth_chainId",
+      })
+      const chainId = parseInt(chainIdHex, 16)
+
+      // Get balance
+      const balanceWei = await window.ethereum.request({
+        method: "eth_getBalance",
+        params: [accounts[0], "latest"],
+      })
+      const balance = (parseInt(balanceWei, 16) / 1e18).toFixed(4)
+
+      setWallet({
+        address: accounts[0],
+        chainId: chainId,
+        balance: balance,
+      })
+
+      setError(null)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to connect wallet"
+      setWalletError(errorMsg)
+      console.error("Wallet connection error:", err)
+    } finally {
+      setConnecting(false)
     }
-    fetchChains()
   }, [])
 
-  const getChainName = (chainId: string) => {
-    const chain = chains.find((c) => c.chainId.toString() === chainId)
-    return chain?.chainName || `Chain ${chainId}`
+  // Disconnect wallet
+  const disconnectWallet = () => {
+    setWallet(null)
+    setQuote(null)
+    setFromAmount("")
+    setToAmount("")
+    setWalletError(null)
   }
 
-  const getQuote = async () => {
+  // Get quote from Squid API
+  const getQuote = useCallback(async () => {
     if (!fromAmount || parseFloat(fromAmount) <= 0) {
       setError("Please enter a valid amount")
       return
     }
 
-    setQuoting(true)
-    setError(null)
-    setQuote(null)
-
-    try {
-      // Convert amount to proper decimal format (accounting for token decimals, usually 18)
-      const amountInWei = (parseFloat(fromAmount) * 1e18).toString()
-
-      const params = new URLSearchParams({
-        fromChain: fromChain,
-        toChain: toChain,
-        fromToken: "0x0000000000000000000000000000000000000000", // Native token
-        toToken: "0x0000000000000000000000000000000000000000", // Native token
-        fromAmount: amountInWei,
-        slippage: "1.5",
-        integratorId: INTEGRATOR_ID,
-        quoteOnly: "true",
-      })
-
-      const response = await fetch(`${SQUID_API_URL}/route?${params.toString()}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(
-          errorData.message || `Failed to get quote (${response.status})`
-        )
-      }
-
-      const data = await response.json()
-      setQuote(data)
-      setToAmount(
-        (parseFloat(data.route.toAmount) / 1e18).toFixed(6)
-      )
-    } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to get quote"
-      setError(errorMsg)
-      console.error("Bridge error:", err)
-    } finally {
-      setQuoting(false)
+    if (fromChain === toChain) {
+      setError("Please select different chains")
+      return
     }
-  }
-
-  const executeSwap = async () => {
-    if (!quote) return
 
     setLoading(true)
     setError(null)
 
     try {
-      // For a real implementation, you would:
-      // 1. Connect user's wallet
-      // 2. Get transaction request from Squid
-      // 3. Sign and send transaction
-      // 4. Monitor transaction status
+      const amountInWei = (parseFloat(fromAmount) * 1e18).toString()
 
-      // This opens the Squid widget for now
-      window.open(
-        `https://widget.squidrouter.com?` +
-          `sourceChain=${fromChain}&` +
-          `destinationChain=${toChain}&` +
-          `defaultTokens=native,native&` +
-          `defaultAmount=${parseFloat(fromAmount) * 1e18}&` +
-          `integratorId=${INTEGRATOR_ID}&` +
-          `comitId=${quote.route.id}`,
-        "_blank"
-      )
+      const params = {
+        fromAddress: wallet?.address || "0x0000000000000000000000000000000000000000",
+        fromChain: fromChain,
+        toChain: toChain,
+        fromToken: "0x0000000000000000000000000000000000000000", // Native token
+        toToken: "0x0000000000000000000000000000000000000000", // Native token
+        fromAmount: amountInWei,
+        toAddress: wallet?.address || "0x0000000000000000000000000000000000000000",
+        slippage: 1.5,
+        slippageConfig: {
+          autoMode: 1,
+        },
+      }
+
+      console.log("Requesting quote with params:", params)
+
+      const response = await fetch(`${SQUID_API_URL}/route`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-integrator-id": INTEGRATOR_ID,
+        },
+        body: JSON.stringify(params),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(
+          errorData.message || `API Error: ${response.status} ${response.statusText}`
+        )
+      }
+
+      const data = await response.json()
+      console.log("Quote received:", data)
+
+      setQuote(data)
+      setToAmount((parseFloat(data.route.toAmount) / 1e18).toFixed(6))
+      setQuoteTimestamp(Date.now())
+      setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to execute swap")
+      const errorMsg = err instanceof Error ? err.message : "Failed to get quote"
+      setError(errorMsg)
+      console.error("Quote error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [fromAmount, fromChain, toChain, wallet?.address])
+
+  // Auto-fetch quote when amount or chains change
+  useEffect(() => {
+    if (!autoRefreshEnabled || !wallet) return
+
+    const timer = setTimeout(() => {
+      if (fromAmount && parseFloat(fromAmount) > 0) {
+        getQuote()
+      }
+    }, 1000) // Wait 1 second after user stops typing
+
+    return () => clearTimeout(timer)
+  }, [fromAmount, fromChain, toChain, autoRefreshEnabled, wallet, getQuote])
+
+  // Execute swap
+  const executeSwap = async () => {
+    if (!wallet) {
+      setError("Please connect wallet first")
+      return
+    }
+
+    if (!quote) {
+      setError("Please get a quote first")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const txRequest = quote.route.transactionRequest
+
+      if (!txRequest) {
+        throw new Error("No transaction request in quote")
+      }
+
+      // Send transaction
+      const txHash = await window.ethereum.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: wallet.address,
+            to: txRequest.target,
+            data: txRequest.data,
+            value: txRequest.value,
+            gas: txRequest.gasLimit,
+            gasPrice: txRequest.gasPrice,
+          },
+        ],
+      })
+
+      alert(`Transaction sent! Hash: ${txHash}`)
+      console.log("Transaction hash:", txHash)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to execute swap"
+      setError(errorMsg)
       console.error("Swap error:", err)
     } finally {
       setLoading(false)
@@ -229,6 +278,10 @@ export function PrivateBridge() {
     setToAmount("")
   }
 
+  const getChainName = (chainId: string) => {
+    return chains.find((c) => c.id === chainId)?.name || `Chain ${chainId}`
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-purple-950/20 p-4">
       <div className="max-w-2xl mx-auto">
@@ -236,215 +289,279 @@ export function PrivateBridge() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">PrivateBridge</h1>
           <p className="text-lg text-muted-foreground">
-            Cross-chain bridging powered by Squid Router
+            Cross-chain bridging powered by Squid Router V2
           </p>
-          <div className="mt-4 inline-block px-3 py-1 bg-green-500/20 border border-green-500/50 rounded-full">
-            <span className="text-sm text-green-400">
-              ✓ Connected to Squid V2 API
-            </span>
-          </div>
         </div>
 
-        {/* Main Bridge Card */}
-        <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
-          <div className="space-y-6">
-            {/* From Section */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label className="text-base">From</Label>
-                <span className="text-xs text-muted-foreground">
-                  {getChainName(fromChain)}
-                </span>
+        {/* Wallet Connection */}
+        {!wallet ? (
+          <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <WalletIcon className="w-5 h-5" />
+                Connect Your Wallet
               </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={fromAmount}
-                  onChange={(e) => {
-                    setFromAmount(e.target.value)
-                    setQuote(null)
-                  }}
-                  className="bg-background/50 border border-border text-lg"
-                  step="0.0001"
-                  min="0"
-                />
-                <select
-                  value={fromChain}
-                  onChange={(e) => {
-                    setFromChain(e.target.value)
-                    setQuote(null)
-                  }}
-                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
-                >
-                  <option value="1">Ethereum</option>
-                  <option value="42161">Arbitrum</option>
-                  <option value="137">Polygon</option>
-                  <option value="10">Optimism</option>
-                  <option value="8453">Base</option>
-                  <option value="101">Solana</option>
-                </select>
-              </div>
-            </div>
+              <p className="text-sm text-muted-foreground">
+                You need to connect your wallet to bridge assets across chains
+              </p>
 
-            {/* Swap Button */}
-            <div className="flex justify-center">
+              {walletError && (
+                <Alert className="border-destructive/50 bg-destructive/10">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <AlertDescription className="text-destructive">
+                    {walletError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Button
-                onClick={swapChains}
-                variant="outline"
-                size="sm"
-                className="rounded-full"
+                onClick={connectWallet}
+                disabled={connecting}
+                className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-xl text-base py-6"
               >
-                <ArrowRight className="w-4 h-4 rotate-90" />
+                {connecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <WalletIcon className="w-4 h-4 mr-2" />
+                    Connect MetaMask
+                  </>
+                )}
               </Button>
-            </div>
 
-            {/* To Section */}
-            <div className="space-y-3">
+              <div className="text-xs text-muted-foreground bg-background/50 p-3 rounded border border-border">
+                <p className="font-semibold mb-2">Requirements:</p>
+                <ul className="space-y-1">
+                  <li>✓ MetaMask or compatible Web3 wallet</li>
+                  <li>✓ Sufficient funds for bridging</li>
+                  <li>✓ Gas fees for both chains</li>
+                </ul>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <>
+            {/* Wallet Info */}
+            <Card className="p-4 bg-green-500/10 border border-green-500/30 mb-6">
               <div className="flex justify-between items-center">
-                <Label className="text-base">To</Label>
-                <span className="text-xs text-muted-foreground">
-                  {getChainName(toChain)}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={toAmount}
-                  readOnly
-                  className="bg-background/50 border border-border text-lg opacity-70"
-                />
-                <select
-                  value={toChain}
-                  onChange={(e) => {
-                    setToChain(e.target.value)
-                    setQuote(null)
-                  }}
-                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Connected Wallet</p>
+                  <p className="font-mono text-sm">
+                    {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Balance: {wallet.balance} ETH
+                  </p>
+                </div>
+                <Button
+                  onClick={disconnectWallet}
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
                 >
-                  <option value="1">Ethereum</option>
-                  <option value="42161">Arbitrum</option>
-                  <option value="137">Polygon</option>
-                  <option value="10">Optimism</option>
-                  <option value="8453">Base</option>
-                  <option value="101">Solana</option>
-                </select>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Disconnect
+                </Button>
               </div>
-            </div>
+            </Card>
 
-            {/* Error Alert */}
-            {error && (
-              <Alert className="border-destructive/50 bg-destructive/10">
-                <AlertCircle className="h-4 w-4 text-destructive" />
-                <AlertDescription className="text-destructive">
-                  {error}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Quote Info */}
-            {quote && (
-              <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                <h4 className="font-semibold text-sm">Quote Details</h4>
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Exchange Rate
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {quote.route.exchangeRate}
-                    </p>
+            {/* Bridge Card */}
+            <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
+              <div className="space-y-6">
+                {/* From Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-base">From</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {getChainName(fromChain)}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Price Impact
-                    </p>
-                    <p className="font-mono font-semibold text-yellow-400">
-                      {quote.route.priceImpact}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Min Received
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {(
-                        parseFloat(quote.route.minReceived) / 1e18
-                      ).toFixed(6)}{" "}
-                      {getChainName(toChain).split(" ")[0]}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Slippage
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {quote.route.slippage}%
-                    </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="0.0"
+                      value={fromAmount}
+                      onChange={(e) => setFromAmount(e.target.value)}
+                      className="bg-background/50 border border-border text-lg"
+                      step="0.0001"
+                      min="0"
+                    />
+                    <select
+                      value={fromChain}
+                      onChange={(e) => {
+                        setFromChain(e.target.value)
+                        setQuote(null)
+                      }}
+                      className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
+                    >
+                      {chains.map((chain) => (
+                        <option key={chain.id} value={chain.id}>
+                          {chain.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                {/* Fee Details */}
-                {quote.route.feeCosts.length > 0 && (
-                  <div className="border-t border-primary/20 pt-3">
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">
-                      Fees
-                    </p>
-                    {quote.route.feeCosts.map((fee, idx) => (
-                      <div
-                        key={idx}
-                        className="flex justify-between text-xs mb-1"
-                      >
-                        <span>{fee.name}</span>
-                        <span>{fee.percentage}%</span>
+                {/* Swap Button */}
+                <div className="flex justify-center">
+                  <Button
+                    onClick={swapChains}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                  >
+                    <ArrowRight className="w-4 h-4 rotate-90" />
+                  </Button>
+                </div>
+
+                {/* To Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-base">To</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {getChainName(toChain)}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="0.0"
+                      value={toAmount}
+                      readOnly
+                      className="bg-background/50 border border-border text-lg opacity-70"
+                    />
+                    <select
+                      value={toChain}
+                      onChange={(e) => {
+                        setToChain(e.target.value)
+                        setQuote(null)
+                      }}
+                      className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
+                    >
+                      {chains.map((chain) => (
+                        <option key={chain.id} value={chain.id}>
+                          {chain.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Auto Refresh Toggle */}
+                <div className="flex items-center gap-2 p-3 bg-background/50 rounded border border-border">
+                  <input
+                    type="checkbox"
+                    id="autoRefresh"
+                    checked={autoRefreshEnabled}
+                    onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="autoRefresh" className="text-sm cursor-pointer">
+                    Auto-fetch quotes
+                  </label>
+                </div>
+
+                {/* Error Alert */}
+                {error && (
+                  <Alert className="border-destructive/50 bg-destructive/10">
+                    <AlertCircle className="h-4 w-4 text-destructive" />
+                    <AlertDescription className="text-destructive">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Quote Info */}
+                {quote && (
+                  <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                    <h4 className="font-semibold text-sm">Quote Details</h4>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs mb-1">
+                          Exchange Rate
+                        </p>
+                        <p className="font-mono font-semibold">
+                          {quote.route.exchangeRate}
+                        </p>
                       </div>
-                    ))}
+                      <div>
+                        <p className="text-muted-foreground text-xs mb-1">
+                          Price Impact
+                        </p>
+                        <p className="font-mono font-semibold text-yellow-400">
+                          {quote.route.priceImpact}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs mb-1">
+                          Min Received
+                        </p>
+                        <p className="font-mono font-semibold">
+                          {(parseFloat(quote.route.minReceived) / 1e18).toFixed(6)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs mb-1">
+                          Slippage
+                        </p>
+                        <p className="font-mono font-semibold">
+                          {quote.route.slippage}%
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Quote updated {new Date(quoteTimestamp).toLocaleTimeString()}
+                    </p>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button
-                onClick={getQuote}
-                disabled={quoting || !fromAmount || fromChain === toChain}
-                className="flex-1 bg-gradient-to-r from-primary to-secondary hover:shadow-xl"
-              >
-                {quoting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Getting Quote...
-                  </>
-                ) : (
-                  <>
-                    Get Quote
-                    <RefreshCw className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={executeSwap}
-                disabled={!quote || loading}
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-xl"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    Bridge Assets
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </Card>
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    onClick={getQuote}
+                    disabled={loading || !fromAmount || fromChain === toChain}
+                    className="flex-1 bg-gradient-to-r from-primary to-secondary hover:shadow-xl"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Getting Quote...
+                      </>
+                    ) : (
+                      <>
+                        Get Quote
+                        <RefreshCw className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={executeSwap}
+                    disabled={!quote || loading || !wallet}
+                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-xl"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Bridge Assets
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </>
+        )}
 
         {/* Squid Info Card */}
         <Card className="p-4 bg-card/50 backdrop-blur border border-primary/30">
@@ -455,9 +572,7 @@ export function PrivateBridge() {
               <div className="flex items-center justify-between p-2 bg-background/50 rounded border border-border">
                 <span className="text-muted-foreground">API:</span>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono">
-                    {SQUID_API_URL}
-                  </code>
+                  <code className="text-xs font-mono">{SQUID_API_URL}</code>
                   <button
                     onClick={() => copyToClipboard(SQUID_API_URL)}
                     className="p-1 hover:bg-primary/10 rounded transition-colors"
@@ -474,9 +589,7 @@ export function PrivateBridge() {
               <div className="flex items-center justify-between p-2 bg-background/50 rounded border border-border">
                 <span className="text-muted-foreground">Integrator ID:</span>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono truncate">
-                    {INTEGRATOR_ID}
-                  </code>
+                  <code className="text-xs font-mono truncate">{INTEGRATOR_ID}</code>
                   <button
                     onClick={() => copyToClipboard(INTEGRATOR_ID)}
                     className="p-1 hover:bg-primary/10 rounded transition-colors"
@@ -506,15 +619,15 @@ export function PrivateBridge() {
         {/* Features */}
         <div className="mt-8 grid md:grid-cols-3 gap-4">
           <Card className="p-4 bg-card/50 backdrop-blur border border-border">
-            <h5 className="font-semibold text-sm mb-2">🔒 Secure</h5>
+            <h5 className="font-semibold text-sm mb-2">🔐 Secure</h5>
             <p className="text-xs text-muted-foreground">
               Audited Squid protocol with multi-chain security
             </p>
           </Card>
           <Card className="p-4 bg-card/50 backdrop-blur border border-border">
-            <h5 className="font-semibold text-sm mb-2">⚡ Fast</h5>
+            <h5 className="font-semibold text-sm mb-2">⚡ Real-time</h5>
             <p className="text-xs text-muted-foreground">
-              Real-time quotes and instant settlements
+              Auto-fetching quotes as you type with live updates
             </p>
           </Card>
           <Card className="p-4 bg-card/50 backdrop-blur border border-border">
@@ -527,4 +640,11 @@ export function PrivateBridge() {
       </div>
     </div>
   )
+}
+
+// Add window.ethereum type declaration
+declare global {
+  interface Window {
+    ethereum?: any
+  }
 }
