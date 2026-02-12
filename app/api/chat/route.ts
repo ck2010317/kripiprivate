@@ -220,13 +220,13 @@ export async function POST(request: NextRequest) {
         if (amount && amount >= 10) {
           // If multiple cards, ask which one
           if (userCards.length > 1) {
-            const cardList = userCards.map((c, i) =>
+            const cardList = userCards.map((c: any, i: number) =>
               `${i + 1}. •••• ${c.cardNumber.slice(-4)} — ${c.nameOnCard} — $${c.balance.toFixed(2)}`
             ).join("\n")
             return NextResponse.json({
               response: `Which card do you want to top up with $${amount}?\n\n${cardList}`,
               action: "select_card_topup",
-              actionData: { amount, cards: userCards.map(c => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard, balance: c.balance })) },
+              actionData: { amount, cards: userCards.map((c: any) => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard, balance: c.balance })) },
             })
           }
           // Single card — proceed
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
         const card = findCard()
         const amount = lastActionData?.amount
         if (card && amount) {
-          const fullCard = userCards.find(c => c.id === card.id)
+          const fullCard = userCards.find((c: any) => c.id === card.id)
           if (!fullCard) return NextResponse.json({ response: `Card not found.`, action: null })
           const serviceFee = (amount * SERVICE_FEE_PERCENT) + SERVICE_FEE_FLAT
           const totalAmount = amount + serviceFee
@@ -534,14 +534,14 @@ export async function POST(request: NextRequest) {
 
         // If user has multiple cards, list them
         if (userCards.length > 1) {
-          const cardList = userCards.map((c, i) => 
+          const cardList = userCards.map((c: any, i: number) => 
             `${i + 1}. •••• ${c.cardNumber.slice(-4)} — ${c.nameOnCard} — $${c.balance.toFixed(2)} (${c.status})`
           ).join("\n")
 
           return NextResponse.json({
             response: `You have ${userCards.length} cards. Which one do you want to top up with $${amount}?\n\n${cardList}\n\nJust say the card number (last 4 digits) like "top up the one ending 9448"`,
             action: "select_card_topup",
-            actionData: { amount, cards: userCards.map(c => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard, balance: c.balance })) },
+            actionData: { amount, cards: userCards.map((c: any) => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard, balance: c.balance })) },
           })
         }
 
@@ -608,7 +608,7 @@ export async function POST(request: NextRequest) {
 
         // Sync balances from KripiCard API
         const balanceResults = await Promise.all(
-          userCards.map(async (card) => {
+          userCards.map(async (card: any) => {
             try {
               const details = await getCardDetails(card.kripiCardId)
               if (details.balance !== card.balance) {
@@ -631,11 +631,11 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        const cardList = balanceResults.map(c =>
+        const cardList = balanceResults.map((c: any) =>
           `💳 •••• ${c.cardNumber.slice(-4)} — ${c.nameOnCard} — **$${c.balance.toFixed(2)}** ${c.status === "FROZEN" ? "❄️" : "✅"}`
         ).join("\n")
 
-        const totalBalance = balanceResults.reduce((sum, c) => sum + c.balance, 0)
+        const totalBalance = balanceResults.reduce((sum: number, c: any) => sum + c.balance, 0)
 
         return NextResponse.json({
           response: `Here are your card balances:\n\n${cardList}\n\n💰 **Total**: $${totalBalance.toFixed(2)}`,
@@ -648,7 +648,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ response: `You don't have any cards to freeze.`, action: null })
         }
 
-        const activeCards = userCards.filter(c => c.status === "ACTIVE")
+        const activeCards = userCards.filter((c: any) => c.status === "ACTIVE")
         if (activeCards.length === 0) {
           return NextResponse.json({ response: `All your cards are already frozen.`, action: null })
         }
@@ -661,19 +661,19 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        const cardList = activeCards.map((c, i) =>
+        const cardList = activeCards.map((c: any, i: number) =>
           `${i + 1}. •••• ${c.cardNumber.slice(-4)} — ${c.nameOnCard} — $${c.balance.toFixed(2)}`
         ).join("\n")
 
         return NextResponse.json({
           response: `Which card do you want to freeze?\n\n${cardList}`,
           action: "select_card_freeze",
-          actionData: { cards: activeCards.map(c => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard })) },
+          actionData: { cards: activeCards.map((c: any) => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard })) },
         })
       }
 
       case "unfreeze": {
-        const frozenCards = userCards.filter(c => c.status === "FROZEN")
+        const frozenCards = userCards.filter((c: any) => c.status === "FROZEN")
         if (frozenCards.length === 0) {
           return NextResponse.json({ response: `None of your cards are frozen.`, action: null })
         }
@@ -686,14 +686,14 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        const cardList = frozenCards.map((c, i) =>
+        const cardList = frozenCards.map((c: any, i: number) =>
           `${i + 1}. •••• ${c.cardNumber.slice(-4)} — ${c.nameOnCard}`
         ).join("\n")
 
         return NextResponse.json({
           response: `Which card do you want to unfreeze?\n\n${cardList}`,
           action: "select_card_unfreeze",
-          actionData: { cards: frozenCards.map(c => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard })) },
+          actionData: { cards: frozenCards.map((c: any) => ({ id: c.id, last4: c.cardNumber.slice(-4), name: c.nameOnCard })) },
         })
       }
 
