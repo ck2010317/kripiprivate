@@ -371,7 +371,7 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
             </Button>
             <Button
               size="lg"
-              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-xl hover:shadow-green-500/40 text-white group font-semibold transition-all duration-300 border border-green-500/30"
+              className="bg-gradient-to-r from-violet-500 to-purple-600 hover:shadow-xl hover:shadow-violet-500/40 text-white group font-semibold transition-all duration-300 border border-violet-500/30"
               onClick={() => window.open("/bridge", "_blank")}
             >
               PrivateBridge

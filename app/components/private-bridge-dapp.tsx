@@ -235,11 +235,13 @@ export function SwapCard() {
         .parseUnits(amount, fromToken.decimals)
         .toString();
 
-      // Ensure wallet is on the correct chain
-      const requiredChainId = parseInt(fromChainId);
-      if (walletChainId !== requiredChainId) {
-        setStep("approving");
-        await switchChainAsync({ chainId: requiredChainId });
+      // Ensure wallet is on the correct chain (EVM only)
+      if (isEvmChain(fromChainId)) {
+        const requiredChainId = parseInt(fromChainId);
+        if (walletChainId !== requiredChainId) {
+          setStep("approving");
+          await switchChainAsync({ chainId: requiredChainId });
+        }
       }
 
       const provider = new ethers.providers.Web3Provider(
@@ -267,8 +269,8 @@ export function SwapCard() {
       setRoute(routeData);
       setRequestId(freshRoute.requestId);
 
-      // Step 2: Approve token for swap (if ERC20)
-      if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+      // Step 2: Approve token for swap (if ERC20, EVM chains only)
+      if (isEvmChain(fromChainId) && fromToken.address !== NATIVE_TOKEN_ADDRESS) {
         setStep("approving");
 
         const tokenContract = new ethers.Contract(
@@ -371,8 +373,10 @@ export function SwapCard() {
   const estimatedTime = route?.route?.estimate?.estimatedRouteDuration;
 
   const isValidInput = fromToken && toToken && amount && parseFloat(amount) > 0;
+  const isEvmChain = (chainId: string) => !isNaN(parseInt(chainId));
   const needsChainSwitch =
-    isConnected && walletChainId !== parseInt(fromChainId);
+    isConnected && isEvmChain(fromChainId) && walletChainId !== parseInt(fromChainId);
+  const isSolanaSource = fromChainId === "solana";
 
   return (
     <div className="w-full max-w-md mx-auto">
@@ -391,7 +395,7 @@ export function SwapCard() {
                   onClick={() => setSlippage(s)}
                   className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
                     slippage === s
-                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                      ? "bg-violet-500/20 text-violet-400 border border-violet-500/30"
                       : "bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600"
                   }`}
                 >
@@ -436,7 +440,7 @@ export function SwapCard() {
                 }
               }}
               placeholder="0.0"
-              className="w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-white text-lg font-medium placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition-colors"
+              className="w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-white text-lg font-medium placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
             />
             {fromAmountUSD && (
               <div className="text-xs text-gray-500 mt-1 pl-1">
@@ -457,7 +461,7 @@ export function SwapCard() {
             className="w-10 h-10 bg-gray-800 border-2 border-gray-700 rounded-xl flex items-center justify-center hover:border-green-500/50 hover:bg-gray-700 transition-all duration-200 group"
           >
             <svg
-              className="w-5 h-5 text-gray-400 group-hover:text-green-400 transition-colors"
+              className="w-5 h-5 text-gray-400 group-hover:text-violet-400 transition-colors"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -505,9 +509,9 @@ export function SwapCard() {
               </div>
             ) : estimatedOutput && toToken ? (
               <>
-                <div className="text-xl font-bold text-green-400">
+                <div className="text-xl font-bold text-violet-400">
                   {estimatedOutput}{" "}
-                  <span className="text-base text-green-400/70">
+                  <span className="text-base text-violet-400/70">
                     {toToken.symbol}
                   </span>
                 </div>
@@ -598,9 +602,16 @@ export function SwapCard() {
           {!isConnected ? (
             <button
               disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500 text-white cursor-default shadow-lg shadow-green-500/25"
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-500 to-purple-600 text-white cursor-default shadow-lg shadow-violet-500/25"
             >
               Connect Wallet to Swap
+            </button>
+          ) : isSolanaSource ? (
+            <button
+              disabled
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-400 cursor-not-allowed"
+            >
+              Solana → EVM bridging coming soon
             </button>
           ) : step === "tracking" && activeTx ? (
             <TransactionStatus
@@ -615,7 +626,9 @@ export function SwapCard() {
             <button
               onClick={async () => {
                 try {
-                  await switchChainAsync({ chainId: parseInt(fromChainId) });
+                  if (isEvmChain(fromChainId)) {
+                    await switchChainAsync({ chainId: parseInt(fromChainId) });
+                  }
                 } catch {
                   setError("Failed to switch chain");
                 }
@@ -635,7 +648,7 @@ export function SwapCard() {
           ) : quoteLoading ? (
             <button
               disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500/50 text-white cursor-wait"
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-violet-500/50 text-white cursor-wait"
             >
               <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -670,8 +683,8 @@ export function SwapCard() {
               disabled={step !== "idle"}
               className={`w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 ${
                 step !== "idle"
-                  ? "bg-green-500/50 text-white cursor-wait"
-                  : "bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/25"
+                  ? "bg-violet-500/50 text-white cursor-wait"
+                  : "bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-lg shadow-violet-500/25"
               }`}
             >
               {step === "fetching-route" ? (
@@ -749,7 +762,7 @@ export function SwapCard() {
               href="https://squidrouter.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-500 hover:text-green-400 transition-colors"
+              className="text-gray-500 hover:text-violet-400 transition-colors"
             >
               Squid Router
             </a>

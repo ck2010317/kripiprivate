@@ -78,6 +78,14 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
     explorerUrl: "https://snowtrace.io",
     color: "#E84142",
   },
+  {
+    chainId: "solana",
+    name: "Solana",
+    icon: "◎",
+    nativeCurrency: "SOL",
+    explorerUrl: "https://solscan.io",
+    color: "#9945FF",
+  },
 ];
 
 // Tokens available per chain
@@ -120,6 +128,11 @@ const CHAIN_TOKENS: Record<string, TokenInfo[]> = {
     { address: NATIVE_TOKEN_ADDRESS, symbol: "AVAX", name: "Avalanche", decimals: 18, icon: "🔺", chainId: "43114" },
     { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", symbol: "USDC", name: "USD Coin", decimals: 6, icon: "💲", chainId: "43114" },
     { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", symbol: "USDT", name: "Tether", decimals: 6, icon: "💵", chainId: "43114" },
+  ],
+  "solana": [
+    { address: "So11111111111111111111111111111111111111112", symbol: "SOL", name: "Solana", decimals: 9, icon: "◎", chainId: "solana" },
+    { address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", symbol: "USDC", name: "USD Coin", decimals: 6, icon: "💲", chainId: "solana" },
+    { address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", symbol: "USDT", name: "Tether", decimals: 6, icon: "💵", chainId: "solana" },
   ],
 };
 

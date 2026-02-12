@@ -60,7 +60,7 @@ export function TransactionStatus({
       <div
         className={`p-4 rounded-xl border ${
           isComplete
-            ? "bg-green-500/10 border-green-500/30"
+            ? "bg-violet-500/10 border-violet-500/30"
             : isFailed
             ? "bg-red-500/10 border-red-500/30"
             : "bg-blue-500/10 border-blue-500/30"
@@ -114,7 +114,7 @@ export function TransactionStatus({
         {isComplete && (
           <button
             onClick={onComplete}
-            className="flex-1 py-2.5 px-4 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 transition-colors"
+            className="flex-1 py-2.5 px-4 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-semibold text-sm hover:from-violet-600 hover:to-purple-700 transition-colors"
           >
             New Swap
           </button>

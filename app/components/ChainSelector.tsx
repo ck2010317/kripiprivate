@@ -68,14 +68,14 @@ export function ChainSelector({
               }}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 text-left hover:bg-gray-800 transition-colors ${
                 chain.chainId === selectedChainId
-                  ? "bg-green-500/10 text-green-400"
+                  ? "bg-violet-500/10 text-violet-400"
                   : "text-white"
               }`}
             >
               <span className="text-lg">{chain.icon}</span>
               <span className="text-sm font-medium">{chain.name}</span>
               {chain.chainId === selectedChainId && (
-                <svg className="w-4 h-4 ml-auto text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 ml-auto text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               )}
