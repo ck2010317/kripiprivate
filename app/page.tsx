@@ -369,6 +369,14 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
               PrivateSim
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
+            <Button
+              size="lg"
+              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-xl hover:shadow-green-500/40 text-white group font-semibold transition-all duration-300 border border-green-500/30"
+              onClick={() => window.open("/bridge", "_blank")}
+            >
+              PrivateBridge
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
           </div>
 
           {/* Feature grid */}
