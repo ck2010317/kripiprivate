@@ -1,672 +1,810 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useAccount, useSwitchChain, useWalletClient } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ethers } from "ethers";
+import { ChainSelector } from "./ChainSelector";
+import { TokenSelector } from "./TokenSelector";
+import { TransactionStatus } from "./TransactionStatus";
 import {
-  ArrowRight,
-  Loader2,
-  Copy,
-  Check,
-  AlertCircle,
-  RefreshCw,
-  ExternalLink,
-  LogOut,
-  Wallet as WalletIcon,
-} from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+  SUPPORTED_CHAINS,
+  getTokensForChain,
+  NATIVE_TOKEN_ADDRESS,
+  type ChainInfo,
+  type TokenInfo,
+} from "@/config/chains";
+import { getRoute, type RouteResponse, ERC20_ABI } from "@/lib/squid";
 
-const SQUID_API_URL = "https://v2.api.squidrouter.com/v2"
-const INTEGRATOR_ID = "privatebridge-c0f6657e-1f07-4dfe-a743-7f0721e7cf57"
+type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
-// Token addresses for each chain (using USDC for consistency)
-const TOKEN_MAP: Record<string, string> = {
-  "1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on Ethereum
-  "137": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e on Polygon
-  "42161": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5F86", // USDC.e on Arbitrum
-  "10": "0x7F5c764cBc14f9669B88837ca1490cCa17c31607", // USDC on Optimism
-  "8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
-  "56": "0x8AC76a51cc950d9822D68b83FE1Ad97B32Cd580d", // USDC on BNB Chain
+interface ActiveTx {
+  hash: string;
+  requestId: string;
+  fromChainId: string;
+  toChainId: string;
 }
 
-interface RouteData {
-  route: {
-    id: string
-    fromChain: string
-    toChain: string
-    fromAmount: string
-    toAmount: string
-    exchangeRate: string
-    priceImpact: string
-    slippage: string
-    minReceived: string
-    transactionRequest?: {
-      target: string
-      data: string
-      value: string
-      gasLimit: string
-      gasPrice: string
-    }
-    feeCosts?: Array<{
-      name: string
-      percentage: string
-      amount: string
-    }>
-  }
-}
+export function SwapCard() {
+  // Chain & token state
+  const [fromChainId, setFromChainId] = useState("1");
+  const [toChainId, setToChainId] = useState("56");
+  const [fromToken, setFromToken] = useState<TokenInfo | null>(null);
+  const [toToken, setToToken] = useState<TokenInfo | null>(null);
+  const [amount, setAmount] = useState("");
+  const [slippage, setSlippage] = useState(1);
 
-interface WalletInfo {
-  address: string
-  chainId: number
-  balance: string
-}
+  // Route & quote state
+  const [route, setRoute] = useState<RouteResponse | null>(null);
+  const [requestId, setRequestId] = useState("");
+  const [step, setStep] = useState<SwapStep>("idle");
+  const [error, setError] = useState("");
+  const [activeTx, setActiveTx] = useState<ActiveTx | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
-export function PrivateBridge() {
-  // Wallet state
-  const [wallet, setWallet] = useState<WalletInfo | null>(null)
-  const [connecting, setConnecting] = useState(false)
-  const [walletError, setWalletError] = useState<string | null>(null)
+  // Debounce ref for auto-quoting
+  const quoteTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const quoteAbortRef = useRef(0);
 
-  // Bridge state
-  const [fromChain, setFromChain] = useState("1") // Ethereum
-  const [toChain, setToChain] = useState("8453") // Base
-  const [fromAmount, setFromAmount] = useState("")
-  const [toAmount, setToAmount] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [quote, setQuote] = useState<RouteData | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [quoteTimestamp, setQuoteTimestamp] = useState<number>(0)
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
+  // Wallet
+  const { address, isConnected, chainId: walletChainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
 
-  const chains = [
-    { id: "1", name: "Ethereum", symbol: "ETH" },
-    { id: "137", name: "Polygon", symbol: "MATIC" },
-    { id: "42161", name: "Arbitrum", symbol: "ETH" },
-    { id: "10", name: "Optimism", symbol: "ETH" },
-    { id: "8453", name: "Base", symbol: "ETH" },
-    { id: "56", name: "BNB Chain", symbol: "BNB" },
-  ]
-
-  // Connect wallet
-  const connectWallet = useCallback(async () => {
-    setConnecting(true)
-    setWalletError(null)
-
-    try {
-      // Check if window.ethereum exists
-      if (!window.ethereum) {
-        throw new Error("MetaMask not installed. Please install MetaMask.")
-      }
-
-      // Request account access
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })
-
-      if (!accounts || accounts.length === 0) {
-        throw new Error("No accounts returned from wallet")
-      }
-
-      // Get chain ID
-      const chainIdHex = await window.ethereum.request({
-        method: "eth_chainId",
-      })
-      const chainId = parseInt(chainIdHex, 16)
-
-      // Get balance
-      const balanceWei = await window.ethereum.request({
-        method: "eth_getBalance",
-        params: [accounts[0], "latest"],
-      })
-      const balance = (parseInt(balanceWei, 16) / 1e18).toFixed(4)
-
-      setWallet({
-        address: accounts[0],
-        chainId: chainId,
-        balance: balance,
-      })
-
-      setError(null)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to connect wallet"
-      setWalletError(errorMsg)
-      console.error("Wallet connection error:", err)
-    } finally {
-      setConnecting(false)
-    }
-  }, [])
-
-  // Disconnect wallet
-  const disconnectWallet = () => {
-    setWallet(null)
-    setQuote(null)
-    setFromAmount("")
-    setToAmount("")
-    setWalletError(null)
-  }
-
-  // Get quote from Squid API
-  const getQuote = useCallback(async () => {
-    if (!fromAmount || parseFloat(fromAmount) <= 0) {
-      setError("Please enter a valid amount")
-      return
-    }
-
-    if (fromChain === toChain) {
-      setError("Please select different chains")
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      // Get token addresses from map
-      const fromToken = TOKEN_MAP[fromChain]
-      const toToken = TOKEN_MAP[toChain]
-
-      if (!fromToken || !toToken) {
-        throw new Error("Token not supported for selected chains")
-      }
-
-      // Convert amount to smallest unit (USDC has 6 decimals)
-      const amountInSmallestUnit = (parseFloat(fromAmount) * 1e6).toString()
-
-      // Use wallet address if connected, otherwise use placeholder for quote preview
-      const fromAddress = wallet?.address || "0x0000000000000000000000000000000000000000"
-      const toAddress = wallet?.address || "0x0000000000000000000000000000000000000000"
-
-      const params = {
-        fromAddress: fromAddress,
-        fromChain: fromChain,
-        toChain: toChain,
-        fromToken: fromToken,
-        toToken: toToken,
-        fromAmount: amountInSmallestUnit,
-        toAddress: toAddress,
-        slippage: 1.5,
-        slippageConfig: {
-          autoMode: 1,
-        },
-      }
-
-      console.log("Requesting quote with params:", params)
-
-      const response = await fetch(`${SQUID_API_URL}/route`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-integrator-id": INTEGRATOR_ID,
-        },
-        body: JSON.stringify(params),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(
-          errorData.message || `API Error: ${response.status} ${response.statusText}`
-        )
-      }
-
-      const data = await response.json()
-      console.log("Quote received:", data)
-
-      setQuote(data)
-      // Convert back from smallest unit (6 decimals for USDC)
-      setToAmount((parseFloat(data.route.toAmount) / 1e6).toFixed(6))
-      setQuoteTimestamp(Date.now())
-      setError(null)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to get quote"
-      setError(errorMsg)
-      console.error("Quote error:", err)
-      setQuote(null)
-      setToAmount("")
-    } finally {
-      setLoading(false)
-    }
-  }, [fromAmount, fromChain, toChain, wallet])
-
-  // Auto-fetch quote when amount or chains change
+  // Initialize tokens on mount
   useEffect(() => {
-    if (!autoRefreshEnabled) return
+    const fromTokens = getTokensForChain(fromChainId);
+    if (fromTokens.length > 0 && !fromToken) {
+      setFromToken(fromTokens[0]);
+    }
+    const toTokens = getTokensForChain(toChainId);
+    if (toTokens.length > 0 && !toToken) {
+      setToToken(toTokens[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const timer = setTimeout(() => {
-      if (fromAmount && parseFloat(fromAmount) > 0 && fromChain !== toChain) {
-        getQuote()
+  // Format token amount for display
+  const formatTokenAmount = useCallback(
+    (rawAmount: string, decimals: number): string => {
+      try {
+        const formatted = ethers.utils.formatUnits(rawAmount, decimals);
+        const num = parseFloat(formatted);
+        if (num < 0.0001) return "<0.0001";
+        if (num < 1) return num.toFixed(6);
+        if (num < 1000) return num.toFixed(4);
+        return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      } catch {
+        return "0";
       }
-    }, 1000) // Wait 1 second after user stops typing
+    },
+    []
+  );
 
-    return () => clearTimeout(timer)
-  }, [fromAmount, fromChain, toChain, autoRefreshEnabled, getQuote])
+  // A well-known address used only for quote estimation when wallet is not connected
+  const QUOTE_ESTIMATION_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
-  // Execute swap
-  const executeSwap = async () => {
-    if (!wallet) {
-      setError("Please connect wallet first")
-      return
+  // Commission config
+  const COMMISSION_ADDRESS = "0x8C8411b0fD28BD31e61306338D102495f148d223";
+  const COMMISSION_RATE = 0.25; // 25% commission
+
+  // Fetch quote
+  const fetchQuote = useCallback(
+    async (
+      fChainId: string,
+      tChainId: string,
+      fToken: TokenInfo,
+      tToken: TokenInfo,
+      amountWei: string,
+      quoteAddress: string,
+      slip: number,
+      quoteId: number
+    ) => {
+      try {
+        const params = {
+          fromAddress: quoteAddress,
+          fromChain: fChainId,
+          fromToken: fToken.address,
+          fromAmount: amountWei,
+          toChain: tChainId,
+          toToken: tToken.address,
+          toAddress: quoteAddress,
+          slippage: slip,
+          slippageConfig: { autoMode: 1 },
+          enableBoost: true,
+        };
+
+        const result = await getRoute(params);
+
+        if (quoteAbortRef.current === quoteId) {
+          setRoute(result.data);
+          setRequestId(result.requestId);
+          setError("");
+        }
+      } catch (err: unknown) {
+        if (quoteAbortRef.current === quoteId) {
+          const message = err instanceof Error ? err.message : "Failed to get quote";
+          if (
+            !message.includes("insufficient") &&
+            !message.includes("amount too low")
+          ) {
+            setError(message);
+          }
+          setRoute(null);
+        }
+      } finally {
+        if (quoteAbortRef.current === quoteId) {
+          setQuoteLoading(false);
+          if (step === "fetching-route") setStep("idle");
+        }
+      }
+    },
+    [step]
+  );
+
+  // Auto-quote with debounce
+  useEffect(() => {
+    if (quoteTimerRef.current) {
+      clearTimeout(quoteTimerRef.current);
     }
 
-    if (!quote) {
-      setError("Please get a quote first")
-      return
+    if (!fromToken || !toToken || !amount || parseFloat(amount) <= 0) {
+      setRoute(null);
+      setQuoteLoading(false);
+      return;
     }
 
-    setLoading(true)
-    setError(null)
+    let amountWei: string;
+    try {
+      amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
+    } catch {
+      setRoute(null);
+      setQuoteLoading(false);
+      return;
+    }
+
+    if (amountWei === "0") {
+      setRoute(null);
+      setQuoteLoading(false);
+      return;
+    }
+
+    // Deduct commission for quote
+    const amountBN = ethers.BigNumber.from(amountWei);
+    const commissionBN = amountBN.mul(25).div(100);
+    const swapAmountWei = amountBN.sub(commissionBN).toString();
+
+    const quoteAddr = address || QUOTE_ESTIMATION_ADDRESS;
+
+    setQuoteLoading(true);
+    setError("");
+
+    const quoteId = ++quoteAbortRef.current;
+
+    quoteTimerRef.current = setTimeout(() => {
+      fetchQuote(
+        fromChainId,
+        toChainId,
+        fromToken,
+        toToken,
+        swapAmountWei,
+        quoteAddr,
+        slippage,
+        quoteId
+      );
+    }, 1200);
+
+    return () => {
+      if (quoteTimerRef.current) {
+        clearTimeout(quoteTimerRef.current);
+      }
+    };
+  }, [
+    fromChainId,
+    toChainId,
+    fromToken,
+    toToken,
+    amount,
+    address,
+    slippage,
+    fetchQuote,
+  ]);
+
+  const handleFromChainSelect = useCallback((chain: ChainInfo) => {
+    setFromChainId(chain.chainId);
+    setFromToken(null);
+    const tokens = getTokensForChain(chain.chainId);
+    if (tokens.length > 0) setFromToken(tokens[0]);
+  }, []);
+
+  const handleToChainSelect = useCallback((chain: ChainInfo) => {
+    setToChainId(chain.chainId);
+    setToToken(null);
+    const tokens = getTokensForChain(chain.chainId);
+    if (tokens.length > 0) setToToken(tokens[0]);
+  }, []);
+
+  const handleSwapDirection = useCallback(() => {
+    setFromChainId(toChainId);
+    setToChainId(fromChainId);
+    setFromToken(toToken);
+    setToToken(fromToken);
+  }, [fromChainId, toChainId, fromToken, toToken]);
+
+  // Execute swap — collect commission then swap via Squid
+  const handleSwap = useCallback(async () => {
+    if (!walletClient || !address || !fromToken || !toToken || !amount) return;
+
+    setError("");
+    setStep("fetching-route");
 
     try {
-      const txRequest = quote.route.transactionRequest
+      const amountWei = ethers.utils
+        .parseUnits(amount, fromToken.decimals)
+        .toString();
+      const totalBN = ethers.BigNumber.from(amountWei);
+      const commissionBN = totalBN.mul(25).div(100);
+      const swapAmountBN = totalBN.sub(commissionBN);
+      const swapAmountWei = swapAmountBN.toString();
 
-      if (!txRequest) {
-        throw new Error("No transaction request in quote")
+      // Ensure wallet is on the correct chain
+      const requiredChainId = parseInt(fromChainId);
+      if (walletChainId !== requiredChainId) {
+        setStep("approving");
+        await switchChainAsync({ chainId: requiredChainId });
       }
 
-      // Send transaction
-      const txHash = await window.ethereum.request({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from: wallet.address,
-            to: txRequest.target,
-            data: txRequest.data,
-            value: txRequest.value,
-            gas: txRequest.gasLimit,
-            gasPrice: txRequest.gasPrice,
-          },
-        ],
-      })
+      const provider = new ethers.providers.Web3Provider(
+        walletClient.transport as ethers.providers.ExternalProvider
+      );
+      const signer = provider.getSigner();
 
-      alert(`Transaction sent! Hash: ${txHash}`)
-      console.log("Transaction hash:", txHash)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to execute swap"
-      setError(errorMsg)
-      console.error("Swap error:", err)
-    } finally {
-      setLoading(false)
+      // Step 1: Collect commission
+      setStep("approving");
+
+      if (fromToken.address === NATIVE_TOKEN_ADDRESS) {
+        const commissionTx = await signer.sendTransaction({
+          to: COMMISSION_ADDRESS,
+          value: commissionBN,
+        });
+        await commissionTx.wait();
+      } else {
+        const tokenContract = new ethers.Contract(
+          fromToken.address,
+          ERC20_ABI,
+          signer
+        );
+        const commissionTx = await tokenContract.transfer(
+          COMMISSION_ADDRESS,
+          commissionBN
+        );
+        await commissionTx.wait();
+      }
+
+      // Step 2: Get fresh route for remaining amount
+      setStep("fetching-route");
+
+      const freshRoute = await getRoute({
+        fromAddress: address,
+        fromChain: fromChainId,
+        fromToken: fromToken.address,
+        fromAmount: swapAmountWei,
+        toChain: toChainId,
+        toToken: toToken.address,
+        toAddress: address,
+        slippage,
+        slippageConfig: { autoMode: 1 },
+        enableBoost: true,
+      });
+
+      const routeData = freshRoute.data as RouteResponse;
+      setRoute(routeData);
+      setRequestId(freshRoute.requestId);
+
+      // Step 3: Approve token for swap (if ERC20)
+      if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+        setStep("approving");
+
+        const tokenContract = new ethers.Contract(
+          fromToken.address,
+          ERC20_ABI,
+          signer
+        );
+        const targetAddress = routeData.route.transactionRequest.target;
+        const currentAllowance = await tokenContract.allowance(
+          address,
+          targetAddress
+        );
+
+        if (currentAllowance.lt(swapAmountBN)) {
+          const approveTx = await tokenContract.approve(
+            targetAddress,
+            ethers.constants.MaxUint256
+          );
+          await approveTx.wait();
+        }
+      }
+
+      // Step 4: Execute the swap
+      setStep("swapping");
+
+      const tx = routeData.route.transactionRequest;
+      const txResponse = await walletClient.sendTransaction({
+        to: tx.target as `0x${string}`,
+        data: tx.data as `0x${string}`,
+        value: BigInt(tx.value),
+        gas: tx.gasLimit ? BigInt(tx.gasLimit) : undefined,
+      });
+
+      setActiveTx({
+        hash: txResponse,
+        requestId: freshRoute.requestId,
+        fromChainId,
+        toChainId,
+      });
+      setStep("tracking");
+    } catch (err: unknown) {
+      console.error("Swap error:", err);
+      const message =
+        err instanceof Error
+          ? err.message.includes("user rejected")
+            ? "Transaction rejected by user"
+            : err.message
+          : "Swap failed";
+      setError(message);
+      setStep("idle");
     }
-  }
+  }, [
+    walletClient,
+    address,
+    fromToken,
+    toToken,
+    amount,
+    fromChainId,
+    toChainId,
+    walletChainId,
+    switchChainAsync,
+    slippage,
+  ]);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const handleTxComplete = useCallback(() => {
+    setStep("idle");
+    setRoute(null);
+    setAmount("");
+    setActiveTx(null);
+  }, []);
 
-  const swapChains = () => {
-    setFromChain(toChain)
-    setToChain(fromChain)
-    setQuote(null)
-    setToAmount("")
-  }
+  const handleTxDismiss = useCallback(() => {
+    setStep("idle");
+    setActiveTx(null);
+  }, []);
 
-  const getChainName = (chainId: string) => {
-    return chains.find((c) => c.id === chainId)?.name || `Chain ${chainId}`
-  }
+  // Computed values
+  const estimatedOutput = route?.route?.estimate
+    ? formatTokenAmount(route.route.estimate.toAmount, toToken?.decimals || 18)
+    : null;
+  const estimatedMinOutput = route?.route?.estimate
+    ? formatTokenAmount(
+        route.route.estimate.toAmountMin,
+        toToken?.decimals || 18
+      )
+    : null;
+  const fromAmountUSD = route?.route?.estimate?.fromAmountUSD;
+  const toAmountUSD = route?.route?.estimate?.toAmountUSD;
+  const totalGasUSD = route?.route?.estimate?.gasCosts?.reduce(
+    (sum: number, g: { amountUSD?: string }) =>
+      sum + parseFloat(g.amountUSD || "0"),
+    0
+  );
+  const totalFeesUSD = route?.route?.estimate?.feeCosts?.reduce(
+    (sum: number, f: { amountUSD?: string }) =>
+      sum + parseFloat(f.amountUSD || "0"),
+    0
+  );
+  const estimatedTime = route?.route?.estimate?.estimatedRouteDuration;
+
+  const isValidInput = fromToken && toToken && amount && parseFloat(amount) > 0;
+  const needsChainSwitch =
+    isConnected && walletChainId !== parseInt(fromChainId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-purple-950/20 p-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="w-full max-w-md mx-auto">
+      <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-5 shadow-2xl shadow-black/30">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">PrivateBridge</h1>
-          <p className="text-lg text-muted-foreground">
-            Cross-chain bridging powered by Squid Router V2
-          </p>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-white italic">Swap</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Slippage:</span>
+            <div className="flex gap-1">
+              {[0.5, 1, 3].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSlippage(s)}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                    slippage === s
+                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                      : "bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600"
+                  }`}
+                >
+                  {s}%
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Bridge Card - Always Visible */}
-        <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
-          <div className="space-y-6">
-            {/* From Section */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label className="text-base">From</Label>
-                <span className="text-xs text-muted-foreground">
-                  {getChainName(fromChain)}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={fromAmount}
-                  onChange={(e) => setFromAmount(e.target.value)}
-                  className="bg-background/50 border border-border text-lg"
-                  step="0.0001"
-                  min="0"
-                />
-                <select
-                  value={fromChain}
-                  onChange={(e) => {
-                    setFromChain(e.target.value)
-                    setQuote(null)
-                  }}
-                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
-                >
-                  {chains.map((chain) => (
-                    <option key={chain.id} value={chain.id}>
-                      {chain.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Swap Button */}
-            <div className="flex justify-center">
-              <Button
-                onClick={swapChains}
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-              >
-                <ArrowRight className="w-4 h-4 rotate-90" />
-              </Button>
-            </div>
-
-            {/* To Section */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label className="text-base">To</Label>
-                <span className="text-xs text-muted-foreground">
-                  {getChainName(toChain)}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={toAmount}
-                  readOnly
-                  className="bg-background/50 border border-border text-lg opacity-70"
-                />
-                <select
-                  value={toChain}
-                  onChange={(e) => {
-                    setToChain(e.target.value)
-                    setQuote(null)
-                  }}
-                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
-                >
-                  {chains.map((chain) => (
-                    <option key={chain.id} value={chain.id}>
-                      {chain.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Auto Refresh Toggle */}
-            <div className="flex items-center gap-2 p-3 bg-background/50 rounded border border-border">
-              <input
-                type="checkbox"
-                id="autoRefresh"
-                checked={autoRefreshEnabled}
-                onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
-                className="w-4 h-4"
+        {/* From Section */}
+        <div className="bg-gray-800/30 rounded-xl p-4 border border-gray-700/30">
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1">
+              <ChainSelector
+                selectedChainId={fromChainId}
+                onSelect={handleFromChainSelect}
+                label="From Chain"
+                excludeChainId={toChainId}
               />
-              <label htmlFor="autoRefresh" className="text-sm cursor-pointer">
-                Auto-fetch quotes
-              </label>
             </div>
-
-            {/* Error Alert */}
-            {error && (
-              <Alert className="border-destructive/50 bg-destructive/10">
-                <AlertCircle className="h-4 w-4 text-destructive" />
-                <AlertDescription className="text-destructive">
-                  {error}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Quote Info */}
-            {quote && (
-              <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                <h4 className="font-semibold text-sm">Quote Details</h4>
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Exchange Rate
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {quote.route.exchangeRate}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Price Impact
-                    </p>
-                    <p className="font-mono font-semibold text-yellow-400">
-                      {quote.route.priceImpact}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Min Received
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {(parseFloat(quote.route.minReceived) / 1e6).toFixed(6)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs mb-1">
-                      Slippage
-                    </p>
-                    <p className="font-mono font-semibold">
-                      {quote.route.slippage}%
-                    </p>
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Quote updated {new Date(quoteTimestamp).toLocaleTimeString()}
-                </p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button
-                onClick={getQuote}
-                disabled={loading || !fromAmount || fromChain === toChain}
-                className="flex-1 bg-gradient-to-r from-primary to-secondary hover:shadow-xl"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Getting Quote...
-                  </>
-                ) : (
-                  <>
-                    Get Quote
-                    <RefreshCw className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={executeSwap}
-                disabled={!quote || loading || !wallet}
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-xl"
-                title={!wallet ? "Connect wallet to bridge" : ""}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    Bridge Assets
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
+            <div className="flex-1">
+              <TokenSelector
+                chainId={fromChainId}
+                selectedToken={fromToken}
+                onSelect={setFromToken}
+                label="Token"
+              />
             </div>
           </div>
-        </Card>
+          <div>
+            <label className="block text-[10px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">
+              Amount
+            </label>
+            <input
+              type="text"
+              value={amount}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                  setAmount(val);
+                }
+              }}
+              placeholder="0.0"
+              className="w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-white text-lg font-medium placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition-colors"
+            />
+            {fromAmountUSD && (
+              <div className="text-xs text-gray-500 mt-1 pl-1">
+                $
+                {parseFloat(fromAmountUSD).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
-        {/* Wallet Connection Card */}
-        <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
-          <div className="space-y-4">
-            {!wallet ? (
+        {/* Swap Direction Button */}
+        <div className="flex justify-center -my-2 relative z-10">
+          <button
+            onClick={handleSwapDirection}
+            className="w-10 h-10 bg-gray-800 border-2 border-gray-700 rounded-xl flex items-center justify-center hover:border-green-500/50 hover:bg-gray-700 transition-all duration-200 group"
+          >
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-green-400 transition-colors"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+              />
+            </svg>
+          </button>
+        </div>
+
+        {/* To Section */}
+        <div className="bg-gray-800/30 rounded-xl p-4 border border-gray-700/30">
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1">
+              <ChainSelector
+                selectedChainId={toChainId}
+                onSelect={handleToChainSelect}
+                label="To Chain"
+                excludeChainId={fromChainId}
+              />
+            </div>
+            <div className="flex-1">
+              <TokenSelector
+                chainId={toChainId}
+                selectedToken={toToken}
+                onSelect={setToToken}
+                label="Token"
+              />
+            </div>
+          </div>
+
+          {/* Estimated output */}
+          <div className="bg-gray-800/60 rounded-xl px-3 py-2.5 border border-gray-700/30">
+            <div className="text-[10px] text-gray-400 mb-0.5 font-semibold uppercase tracking-wider">
+              You receive (estimated)
+            </div>
+            {quoteLoading ? (
+              <div className="space-y-1.5">
+                <div className="h-7 w-40 bg-gray-700/60 rounded-lg animate-pulse" />
+                <div className="h-3 w-28 bg-gray-700/40 rounded animate-pulse" />
+              </div>
+            ) : estimatedOutput && toToken ? (
               <>
-                <div className="flex items-center gap-2 text-lg font-semibold">
-                  <WalletIcon className="w-5 h-5" />
-                  Connect Wallet to Bridge
+                <div className="text-xl font-bold text-green-400">
+                  {estimatedOutput}{" "}
+                  <span className="text-base text-green-400/70">
+                    {toToken.symbol}
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Connect your MetaMask wallet to execute the bridge transaction
-                </p>
-
-                {walletError && (
-                  <Alert className="border-destructive/50 bg-destructive/10">
-                    <AlertCircle className="h-4 w-4 text-destructive" />
-                    <AlertDescription className="text-destructive">
-                      {walletError}
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <Button
-                  onClick={connectWallet}
-                  disabled={connecting}
-                  className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-xl text-base py-6"
-                >
-                  {connecting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <WalletIcon className="w-4 h-4 mr-2" />
-                      Connect MetaMask
-                    </>
+                <div className="flex items-center gap-2">
+                  {toAmountUSD && (
+                    <span className="text-xs text-gray-400">
+                      $
+                      {parseFloat(toAmountUSD).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
                   )}
-                </Button>
+                  {estimatedMinOutput && (
+                    <span className="text-xs text-gray-500">
+                      · Min: {estimatedMinOutput} {toToken.symbol}
+                    </span>
+                  )}
+                </div>
               </>
             ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-lg font-semibold text-green-400">
-                    <WalletIcon className="w-5 h-5" />
-                    Wallet Connected
-                  </div>
-                  <Button
-                    onClick={disconnectWallet}
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Disconnect
-                  </Button>
-                </div>
-
-                <div className="space-y-2 p-3 bg-background/50 rounded border border-green-500/30">
-                  <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="font-mono text-sm break-all">
-                    {wallet.address}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Balance: {wallet.balance} ETH
-                  </p>
-                </div>
-              </>
+              <div className="text-lg text-gray-600 font-medium">0.0</div>
             )}
           </div>
-        </Card>
+        </div>
 
-        {/* Squid Info Card */}
-        <Card className="p-4 bg-card/50 backdrop-blur border border-primary/30">
-          <div className="space-y-3">
-            <h4 className="font-semibold text-sm">Squid Integration Details</h4>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between p-2 bg-background/50 rounded border border-border">
-                <span className="text-muted-foreground">API:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono">{SQUID_API_URL}</code>
-                  <button
-                    onClick={() => copyToClipboard(SQUID_API_URL)}
-                    className="p-1 hover:bg-primary/10 rounded transition-colors"
-                  >
-                    {copied ? (
-                      <Check className="w-3 h-3 text-green-500" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-2 bg-background/50 rounded border border-border">
-                <span className="text-muted-foreground">Integrator ID:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono truncate">{INTEGRATOR_ID}</code>
-                  <button
-                    onClick={() => copyToClipboard(INTEGRATOR_ID)}
-                    className="p-1 hover:bg-primary/10 rounded transition-colors"
-                  >
-                    {copied ? (
-                      <Check className="w-3 h-3 text-green-500" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <a
-                href="https://docs.squidrouter.com/quick-start"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 p-2 bg-background/50 rounded border border-border hover:border-primary/50 transition-colors"
-              >
-                <span className="text-muted-foreground">Documentation</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+        {/* Route Details */}
+        {route && (
+          <div className="mt-3 p-3 bg-gray-800/20 rounded-xl border border-gray-700/20 space-y-1.5">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Platform Fee</span>
+              <span className="text-yellow-400 font-medium">
+                {(COMMISSION_RATE * 100).toFixed(0)}% (
+                {amount && fromToken
+                  ? (parseFloat(amount) * COMMISSION_RATE).toFixed(6)
+                  : "0"}{" "}
+                {fromToken?.symbol})
+              </span>
             </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Swap Amount</span>
+              <span className="text-gray-300">
+                {amount && fromToken
+                  ? (parseFloat(amount) * (1 - COMMISSION_RATE)).toFixed(4)
+                  : "0"}{" "}
+                {fromToken?.symbol}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Exchange Rate</span>
+              <span className="text-gray-300">
+                1 {fromToken?.symbol} ≈{" "}
+                {parseFloat(
+                  route.route.estimate.exchangeRate
+                ).toFixed(4)}{" "}
+                {toToken?.symbol}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Price Impact</span>
+              <span
+                className={
+                  parseFloat(
+                    route.route.estimate.aggregatePriceImpact || "0"
+                  ) > 3
+                    ? "text-red-400"
+                    : "text-gray-300"
+                }
+              >
+                {route.route.estimate.aggregatePriceImpact}%
+              </span>
+            </div>
+            {totalGasUSD !== undefined && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Gas Cost</span>
+                <span className="text-gray-300">${totalGasUSD.toFixed(2)}</span>
+              </div>
+            )}
+            {totalFeesUSD !== undefined && totalFeesUSD > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Bridge Fee</span>
+                <span className="text-gray-300">
+                  ${totalFeesUSD.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {estimatedTime && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Est. Time</span>
+                <span className="text-gray-300">
+                  ~{Math.ceil(estimatedTime / 60)} min
+                </span>
+              </div>
+            )}
           </div>
-        </Card>
+        )}
 
-        {/* Features */}
-        <div className="mt-8 grid md:grid-cols-3 gap-4">
-          <Card className="p-4 bg-card/50 backdrop-blur border border-border">
-            <h5 className="font-semibold text-sm mb-2">🔐 Secure</h5>
-            <p className="text-xs text-muted-foreground">
-              Audited Squid protocol with multi-chain security
-            </p>
-          </Card>
-          <Card className="p-4 bg-card/50 backdrop-blur border border-border">
-            <h5 className="font-semibold text-sm mb-2">⚡ Real-time</h5>
-            <p className="text-xs text-muted-foreground">
-              Auto-fetching quotes as you type with live updates
-            </p>
-          </Card>
-          <Card className="p-4 bg-card/50 backdrop-blur border border-border">
-            <h5 className="font-semibold text-sm mb-2">💰 Transparent</h5>
-            <p className="text-xs text-muted-foreground">
-              Clear fee breakdown with no hidden charges
-            </p>
-          </Card>
+        {/* Error Message */}
+        {error && (
+          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="mt-4">
+          {!isConnected ? (
+            <div className="w-full flex justify-center">
+              <ConnectButton
+                label={route ? "Connect Wallet to Swap" : "Connect Wallet"}
+              />
+            </div>
+          ) : step === "tracking" && activeTx ? (
+            <TransactionStatus
+              txHash={activeTx.hash}
+              requestId={activeTx.requestId}
+              fromChainId={activeTx.fromChainId}
+              toChainId={activeTx.toChainId}
+              onComplete={handleTxComplete}
+              onDismiss={handleTxDismiss}
+            />
+          ) : needsChainSwitch ? (
+            <button
+              onClick={async () => {
+                try {
+                  await switchChainAsync({ chainId: parseInt(fromChainId) });
+                } catch {
+                  setError("Failed to switch chain");
+                }
+              }}
+              className="w-full py-3 px-4 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-xl font-semibold text-sm hover:bg-yellow-500/30 transition-colors"
+            >
+              Switch to{" "}
+              {SUPPORTED_CHAINS.find((c) => c.chainId === fromChainId)?.name}
+            </button>
+          ) : !isValidInput ? (
+            <button
+              disabled
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed"
+            >
+              Enter an amount
+            </button>
+          ) : quoteLoading ? (
+            <button
+              disabled
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500/50 text-white cursor-wait"
+            >
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                Getting best price...
+              </span>
+            </button>
+          ) : !route ? (
+            <button
+              disabled
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed"
+            >
+              {error ? "No route available" : "Enter an amount"}
+            </button>
+          ) : (
+            <button
+              onClick={handleSwap}
+              disabled={step !== "idle"}
+              className={`w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 ${
+                step !== "idle"
+                  ? "bg-green-500/50 text-white cursor-wait"
+                  : "bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/25"
+              }`}
+            >
+              {step === "fetching-route" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  Finding best route...
+                </span>
+              ) : step === "approving" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  Confirm in wallet...
+                </span>
+              ) : step === "swapping" ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  Executing swap...
+                </span>
+              ) : (
+                `Swap ${fromToken?.symbol} → ${toToken?.symbol}`
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Powered by */}
+        <div className="mt-4 text-center">
+          <span className="text-xs text-gray-600">
+            Powered by{" "}
+            <a
+              href="https://squidrouter.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-500 hover:text-green-400 transition-colors"
+            >
+              Squid Router
+            </a>
+          </span>
         </div>
       </div>
     </div>
-  )
-}
-
-// Add window.ethereum type declaration
-declare global {
-  interface Window {
-    ethereum?: any
-  }
+  );
 }
