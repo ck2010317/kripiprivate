@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useAccount, useSwitchChain, useWalletClient } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import { ChainSelector } from "./ChainSelector";
 import { TokenSelector } from "./TokenSelector";
@@ -48,6 +47,8 @@ export function SwapCard() {
 
   // Wallet
   const { address, isConnected, chainId: walletChainId } = useAccount();
+  const { connectors, connect, isPending: isConnecting } = useConnect();
+  const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
 
@@ -410,6 +411,24 @@ export function SwapCard() {
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-5 shadow-2xl shadow-black/30">
+        {/* Wallet Bar */}
+        {isConnected && address && (
+          <div className="flex items-center justify-between mb-3 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-xl">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs text-green-400 font-mono">
+                {address.slice(0, 6)}...{address.slice(-4)}
+              </span>
+            </div>
+            <button
+              onClick={() => disconnect()}
+              className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors"
+            >
+              Disconnect
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-white italic">Swap</h2>
@@ -646,10 +665,27 @@ export function SwapCard() {
         {/* Action Buttons */}
         <div className="mt-4">
           {!isConnected ? (
-            <div className="w-full flex justify-center">
-              <ConnectButton
-                label={route ? "Connect Wallet to Swap" : "Connect Wallet"}
-              />
+            <div className="w-full space-y-2">
+              {connectors.map((connector) => (
+                <button
+                  key={connector.uid}
+                  onClick={() => connect({ connector })}
+                  disabled={isConnecting}
+                  className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-wait"
+                >
+                  {isConnecting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Connecting...
+                    </>
+                  ) : (
+                    `Connect ${connector.name}`
+                  )}
+                </button>
+              ))}
             </div>
           ) : step === "tracking" && activeTx ? (
             <TransactionStatus
