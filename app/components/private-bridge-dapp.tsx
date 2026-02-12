@@ -21,6 +21,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 const SQUID_API_URL = "https://v2.api.squidrouter.com/v2"
 const INTEGRATOR_ID = "privatebridge-c0f6657e-1f07-4dfe-a743-7f0721e7cf57"
 
+// Token addresses for each chain (using USDC for consistency)
+const TOKEN_MAP: Record<string, string> = {
+  "1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on Ethereum
+  "137": "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC.e on Polygon
+  "42161": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5F86", // USDC.e on Arbitrum
+  "10": "0x7F5c764cBc14f9669B88837ca1490cCa17c31607", // USDC on Optimism
+  "8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
+  "56": "0x8AC76a51cc950d9822D68b83FE1Ad97B32Cd580d", // USDC on BNB Chain
+}
+
 interface RouteData {
   route: {
     id: string
@@ -140,6 +150,12 @@ export function PrivateBridge() {
 
   // Get quote from Squid API
   const getQuote = useCallback(async () => {
+    // Don't fetch without wallet connection
+    if (!wallet) {
+      setError("Please connect your wallet first")
+      return
+    }
+
     if (!fromAmount || parseFloat(fromAmount) <= 0) {
       setError("Please enter a valid amount")
       return
@@ -154,16 +170,25 @@ export function PrivateBridge() {
     setError(null)
 
     try {
-      const amountInWei = (parseFloat(fromAmount) * 1e18).toString()
+      // Get token addresses from map
+      const fromToken = TOKEN_MAP[fromChain]
+      const toToken = TOKEN_MAP[toChain]
+
+      if (!fromToken || !toToken) {
+        throw new Error("Token not supported for selected chains")
+      }
+
+      // Convert amount to smallest unit (USDC has 6 decimals)
+      const amountInSmallestUnit = (parseFloat(fromAmount) * 1e6).toString()
 
       const params = {
-        fromAddress: wallet?.address || "0x0000000000000000000000000000000000000000",
+        fromAddress: wallet.address,
         fromChain: fromChain,
         toChain: toChain,
-        fromToken: "0x0000000000000000000000000000000000000000", // Native token
-        toToken: "0x0000000000000000000000000000000000000000", // Native token
-        fromAmount: amountInWei,
-        toAddress: wallet?.address || "0x0000000000000000000000000000000000000000",
+        fromToken: fromToken,
+        toToken: toToken,
+        fromAmount: amountInSmallestUnit,
+        toAddress: wallet.address,
         slippage: 1.5,
         slippageConfig: {
           autoMode: 1,
@@ -192,24 +217,27 @@ export function PrivateBridge() {
       console.log("Quote received:", data)
 
       setQuote(data)
-      setToAmount((parseFloat(data.route.toAmount) / 1e18).toFixed(6))
+      // Convert back from smallest unit (6 decimals for USDC)
+      setToAmount((parseFloat(data.route.toAmount) / 1e6).toFixed(6))
       setQuoteTimestamp(Date.now())
       setError(null)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to get quote"
       setError(errorMsg)
       console.error("Quote error:", err)
+      setQuote(null)
+      setToAmount("")
     } finally {
       setLoading(false)
     }
-  }, [fromAmount, fromChain, toChain, wallet?.address])
+  }, [fromAmount, fromChain, toChain, wallet])
 
-  // Auto-fetch quote when amount or chains change
+  // Auto-fetch quote when amount or chains change (only when wallet connected)
   useEffect(() => {
     if (!autoRefreshEnabled || !wallet) return
 
     const timer = setTimeout(() => {
-      if (fromAmount && parseFloat(fromAmount) > 0) {
+      if (fromAmount && parseFloat(fromAmount) > 0 && fromChain !== toChain) {
         getQuote()
       }
     }, 1000) // Wait 1 second after user stops typing
