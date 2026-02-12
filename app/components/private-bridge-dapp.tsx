@@ -85,10 +85,6 @@ export function SwapCard() {
   // A well-known address used only for quote estimation when wallet is not connected
   const QUOTE_ESTIMATION_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
-  // Commission config
-  const COMMISSION_ADDRESS = "0x8C8411b0fD28BD31e61306338D102495f148d223";
-  const COMMISSION_RATE = 0.25; // 25% commission
-
   // Fetch quote
   const fetchQuote = useCallback(
     async (
@@ -170,11 +166,6 @@ export function SwapCard() {
       return;
     }
 
-    // Deduct commission for quote
-    const amountBN = ethers.BigNumber.from(amountWei);
-    const commissionBN = amountBN.mul(25).div(100);
-    const swapAmountWei = amountBN.sub(commissionBN).toString();
-
     const quoteAddr = address || QUOTE_ESTIMATION_ADDRESS;
 
     setQuoteLoading(true);
@@ -188,7 +179,7 @@ export function SwapCard() {
         toChainId,
         fromToken,
         toToken,
-        swapAmountWei,
+        amountWei,
         quoteAddr,
         slippage,
         quoteId
@@ -232,7 +223,7 @@ export function SwapCard() {
     setToToken(fromToken);
   }, [fromChainId, toChainId, fromToken, toToken]);
 
-  // Execute swap — collect commission then swap via Squid
+  // Execute swap via Squid
   const handleSwap = useCallback(async () => {
     if (!walletClient || !address || !fromToken || !toToken || !amount) return;
 
@@ -243,10 +234,6 @@ export function SwapCard() {
       const amountWei = ethers.utils
         .parseUnits(amount, fromToken.decimals)
         .toString();
-      const totalBN = ethers.BigNumber.from(amountWei);
-      const commissionBN = totalBN.mul(25).div(100);
-      const swapAmountBN = totalBN.sub(commissionBN);
-      const swapAmountWei = swapAmountBN.toString();
 
       // Ensure wallet is on the correct chain
       const requiredChainId = parseInt(fromChainId);
@@ -260,36 +247,14 @@ export function SwapCard() {
       );
       const signer = provider.getSigner();
 
-      // Step 1: Collect commission
-      setStep("approving");
-
-      if (fromToken.address === NATIVE_TOKEN_ADDRESS) {
-        const commissionTx = await signer.sendTransaction({
-          to: COMMISSION_ADDRESS,
-          value: commissionBN,
-        });
-        await commissionTx.wait();
-      } else {
-        const tokenContract = new ethers.Contract(
-          fromToken.address,
-          ERC20_ABI,
-          signer
-        );
-        const commissionTx = await tokenContract.transfer(
-          COMMISSION_ADDRESS,
-          commissionBN
-        );
-        await commissionTx.wait();
-      }
-
-      // Step 2: Get fresh route for remaining amount
+      // Step 1: Get fresh route for full amount
       setStep("fetching-route");
 
       const freshRoute = await getRoute({
         fromAddress: address,
         fromChain: fromChainId,
         fromToken: fromToken.address,
-        fromAmount: swapAmountWei,
+        fromAmount: amountWei,
         toChain: toChainId,
         toToken: toToken.address,
         toAddress: address,
@@ -302,7 +267,7 @@ export function SwapCard() {
       setRoute(routeData);
       setRequestId(freshRoute.requestId);
 
-      // Step 3: Approve token for swap (if ERC20)
+      // Step 2: Approve token for swap (if ERC20)
       if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
         setStep("approving");
 
@@ -317,7 +282,8 @@ export function SwapCard() {
           targetAddress
         );
 
-        if (currentAllowance.lt(swapAmountBN)) {
+        const amountBN = ethers.BigNumber.from(amountWei);
+        if (currentAllowance.lt(amountBN)) {
           const approveTx = await tokenContract.approve(
             targetAddress,
             ethers.constants.MaxUint256
@@ -326,7 +292,7 @@ export function SwapCard() {
         }
       }
 
-      // Step 4: Execute the swap
+      // Step 3: Execute the swap
       setStep("swapping");
 
       const tx = routeData.route.transactionRequest;
@@ -411,23 +377,7 @@ export function SwapCard() {
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-5 shadow-2xl shadow-black/30">
-        {/* Wallet Bar */}
-        {isConnected && address && (
-          <div className="flex items-center justify-between mb-3 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-xl">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-xs text-green-400 font-mono">
-                {address.slice(0, 6)}...{address.slice(-4)}
-              </span>
-            </div>
-            <button
-              onClick={() => disconnect()}
-              className="text-xs text-red-400 hover:text-red-300 font-medium transition-colors"
-            >
-              Disconnect
-            </button>
-          </div>
-        )}
+
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -588,25 +538,6 @@ export function SwapCard() {
         {route && (
           <div className="mt-3 p-3 bg-gray-800/20 rounded-xl border border-gray-700/20 space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Platform Fee</span>
-              <span className="text-yellow-400 font-medium">
-                {(COMMISSION_RATE * 100).toFixed(0)}% (
-                {amount && fromToken
-                  ? (parseFloat(amount) * COMMISSION_RATE).toFixed(6)
-                  : "0"}{" "}
-                {fromToken?.symbol})
-              </span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Swap Amount</span>
-              <span className="text-gray-300">
-                {amount && fromToken
-                  ? (parseFloat(amount) * (1 - COMMISSION_RATE)).toFixed(4)
-                  : "0"}{" "}
-                {fromToken?.symbol}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs">
               <span className="text-gray-400">Exchange Rate</span>
               <span className="text-gray-300">
                 1 {fromToken?.symbol} ≈{" "}
@@ -665,28 +596,12 @@ export function SwapCard() {
         {/* Action Buttons */}
         <div className="mt-4">
           {!isConnected ? (
-            <div className="w-full space-y-2">
-              {connectors.map((connector) => (
-                <button
-                  key={connector.uid}
-                  onClick={() => connect({ connector })}
-                  disabled={isConnecting}
-                  className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-wait"
-                >
-                  {isConnecting ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Connecting...
-                    </>
-                  ) : (
-                    `Connect ${connector.name}`
-                  )}
-                </button>
-              ))}
-            </div>
+            <button
+              disabled
+              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-green-500 text-white cursor-default shadow-lg shadow-green-500/25"
+            >
+              Connect Wallet to Swap
+            </button>
           ) : step === "tracking" && activeTx ? (
             <TransactionStatus
               txHash={activeTx.hash}
