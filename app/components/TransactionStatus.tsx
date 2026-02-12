@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getStatus } from "@/lib/squid";
-import { getChainById } from "@/config/chains";
+import {
+  getOrderStatus,
+  getOrderIdByTxHash,
+  DEBRIDGE_COMPLETED_STATES,
+  DEBRIDGE_FAILED_STATES,
+} from "@/lib/debridge";
+import { getChainById, isSolanaChain } from "@/config/chains";
 
 interface TransactionStatusProps {
   txHash: string;
-  requestId: string;
+  orderId: string;
   fromChainId: string;
   toChainId: string;
   onComplete: () => void;
@@ -15,45 +20,100 @@ interface TransactionStatusProps {
 
 export function TransactionStatus({
   txHash,
-  requestId,
+  orderId: initialOrderId,
   fromChainId,
   toChainId,
   onComplete,
   onDismiss,
 }: TransactionStatusProps) {
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState("Pending");
+  const [resolvedOrderId, setResolvedOrderId] = useState(initialOrderId);
   const [error, setError] = useState("");
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
 
+  // Resolve order ID from tx hash if not provided
+  useEffect(() => {
+    if (resolvedOrderId) return;
+
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const resolveOrderId = async () => {
+      try {
+        const result = await getOrderIdByTxHash(txHash);
+        if (result.orderIds && result.orderIds.length > 0) {
+          setResolvedOrderId(result.orderIds[0]);
+          return true;
+        }
+      } catch {
+        // Silently retry
+      }
+      return false;
+    };
+
+    const interval = setInterval(async () => {
+      attempts++;
+      const found = await resolveOrderId();
+      if (found || attempts >= maxAttempts) {
+        clearInterval(interval);
+        if (!found && attempts >= maxAttempts) {
+          setError("Could not resolve order ID. Check explorer for status.");
+        }
+      }
+    }, 5000);
+
+    resolveOrderId();
+
+    return () => clearInterval(interval);
+  }, [txHash, resolvedOrderId]);
+
+  // Poll order status
   const checkStatus = useCallback(async () => {
+    if (!resolvedOrderId) return;
     try {
-      const result = await getStatus({
-        transactionId: txHash,
-        requestId,
-        fromChainId,
-        toChainId,
-      });
-      setStatus(result.squidTransactionStatus);
+      const result = await getOrderStatus(resolvedOrderId);
+      if (result.status) {
+        setStatus(result.status);
+      }
     } catch {
       // Don't error on polling failures, just retry
     }
-  }, [txHash, requestId, fromChainId, toChainId]);
+  }, [resolvedOrderId]);
 
   useEffect(() => {
-    const completedStatuses = ["success", "partial_success", "needs_gas", "not_found"];
+    if (!resolvedOrderId) return;
 
-    if (completedStatuses.includes(status)) return;
+    const isTerminal =
+      DEBRIDGE_COMPLETED_STATES.includes(status) ||
+      DEBRIDGE_FAILED_STATES.includes(status);
+
+    if (isTerminal) return;
 
     const interval = setInterval(checkStatus, 5000);
     checkStatus(); // initial check
 
     return () => clearInterval(interval);
-  }, [status, checkStatus]);
+  }, [status, resolvedOrderId, checkStatus]);
 
-  const isComplete = status === "success" || status === "partial_success";
-  const isFailed = status === "needs_gas" || status === "not_found";
+  const isComplete = DEBRIDGE_COMPLETED_STATES.includes(status);
+  const isFailed = DEBRIDGE_FAILED_STATES.includes(status);
+
+  const getExplorerUrl = (chainId: string, hash: string) => {
+    if (isSolanaChain(chainId)) {
+      return `https://solscan.io/tx/${hash}`;
+    }
+    const chain = getChainById(chainId);
+    return `${chain?.explorerUrl}/tx/${hash}`;
+  };
+
+  const getDebridgeExplorerUrl = () => {
+    if (resolvedOrderId) {
+      return `https://app.debridge.finance/order?orderId=${resolvedOrderId}`;
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-3">
@@ -89,20 +149,38 @@ export function TransactionStatus({
             </p>
             <p className="text-xs text-gray-400">
               {fromChain?.name} → {toChain?.name}
+              {!isComplete && !isFailed && (
+                <span className="ml-2 text-gray-500">({status})</span>
+              )}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Tx:</span>
-          <a
-            href={`${fromChain?.explorerUrl}/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300 font-mono truncate"
-          >
-            {txHash.slice(0, 10)}...{txHash.slice(-8)}
-          </a>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Tx:</span>
+            <a
+              href={getExplorerUrl(fromChainId, txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-400 hover:text-blue-300 font-mono truncate"
+            >
+              {txHash.slice(0, 10)}...{txHash.slice(-8)}
+            </a>
+          </div>
+          {getDebridgeExplorerUrl() && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Track:</span>
+              <a
+                href={getDebridgeExplorerUrl()!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-violet-400 hover:text-violet-300"
+              >
+                View on deBridge Explorer ↗
+              </a>
+            </div>
+          )}
         </div>
 
         {error && (

@@ -10,16 +10,23 @@ import {
   SUPPORTED_CHAINS,
   getTokensForChain,
   NATIVE_TOKEN_ADDRESS,
+  SOLANA_CHAIN_ID,
+  isEvmChain,
+  isSolanaChain,
   type ChainInfo,
   type TokenInfo,
 } from "@/config/chains";
-import { getRoute, type RouteResponse, ERC20_ABI } from "@/lib/squid";
+import {
+  getQuote,
+  type DeBridgeResponse,
+  ERC20_ABI,
+} from "@/lib/debridge";
 
 type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
 interface ActiveTx {
   hash: string;
-  requestId: string;
+  orderId: string;
   fromChainId: string;
   toChainId: string;
 }
@@ -27,21 +34,20 @@ interface ActiveTx {
 export function SwapCard() {
   // Chain & token state
   const [fromChainId, setFromChainId] = useState("1");
-  const [toChainId, setToChainId] = useState("56");
+  const [toChainId, setToChainId] = useState(SOLANA_CHAIN_ID);
   const [fromToken, setFromToken] = useState<TokenInfo | null>(null);
   const [toToken, setToToken] = useState<TokenInfo | null>(null);
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(1);
 
-  // Route & quote state
-  const [route, setRoute] = useState<RouteResponse | null>(null);
-  const [requestId, setRequestId] = useState("");
+  // Quote state
+  const [quote, setQuote] = useState<DeBridgeResponse | null>(null);
   const [step, setStep] = useState<SwapStep>("idle");
   const [error, setError] = useState("");
   const [activeTx, setActiveTx] = useState<ActiveTx | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
 
-  // Debounce ref for auto-quoting
+  // Debounce ref
   const quoteTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteAbortRef = useRef(0);
 
@@ -55,13 +61,9 @@ export function SwapCard() {
   // Initialize tokens on mount
   useEffect(() => {
     const fromTokens = getTokensForChain(fromChainId);
-    if (fromTokens.length > 0 && !fromToken) {
-      setFromToken(fromTokens[0]);
-    }
+    if (fromTokens.length > 0 && !fromToken) setFromToken(fromTokens[0]);
     const toTokens = getTokensForChain(toChainId);
-    if (toTokens.length > 0 && !toToken) {
-      setToToken(toTokens[0]);
-    }
+    if (toTokens.length > 0 && !toToken) setToToken(toTokens[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -82,10 +84,10 @@ export function SwapCard() {
     []
   );
 
-  // A well-known address used only for quote estimation when wallet is not connected
+  // Placeholder address for estimation when wallet not connected
   const QUOTE_ESTIMATION_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
-  // Fetch quote
+  // Fetch quote from deBridge
   const fetchQuote = useCallback(
     async (
       fChainId: string,
@@ -93,29 +95,34 @@ export function SwapCard() {
       fToken: TokenInfo,
       tToken: TokenInfo,
       amountWei: string,
-      quoteAddress: string,
-      slip: number,
+      quoteAddress: string | undefined,
       quoteId: number
     ) => {
       try {
-        const params = {
-          fromAddress: quoteAddress,
-          fromChain: fChainId,
-          fromToken: fToken.address,
-          fromAmount: amountWei,
-          toChain: tChainId,
-          toToken: tToken.address,
-          toAddress: quoteAddress,
-          slippage: slip,
-          slippageConfig: { autoMode: 1 },
-          enableBoost: true,
-        };
-
-        const result = await getRoute(params);
+        // deBridge create-tx works for estimation without wallet addresses
+        const result = await getQuote({
+          srcChainId: fChainId,
+          srcChainTokenIn: fToken.address,
+          srcChainTokenInAmount: amountWei,
+          dstChainId: tChainId,
+          dstChainTokenOut: tToken.address,
+          prependOperatingExpenses: true,
+          // Only include addresses if wallet is connected (for full tx generation)
+          ...(quoteAddress && isEvmChain(fChainId)
+            ? {
+                srcChainOrderAuthorityAddress: quoteAddress,
+                dstChainOrderAuthorityAddress: isSolanaChain(tChainId)
+                  ? undefined
+                  : quoteAddress,
+                dstChainTokenOutRecipient: isSolanaChain(tChainId)
+                  ? undefined
+                  : quoteAddress,
+              }
+            : {}),
+        });
 
         if (quoteAbortRef.current === quoteId) {
-          setRoute(result.data);
-          setRequestId(result.requestId);
+          setQuote(result);
           setError("");
         }
       } catch (err: unknown) {
@@ -123,11 +130,11 @@ export function SwapCard() {
           const message = err instanceof Error ? err.message : "Failed to get quote";
           if (
             !message.includes("insufficient") &&
-            !message.includes("amount too low")
+            !message.includes("too small")
           ) {
             setError(message);
           }
-          setRoute(null);
+          setQuote(null);
         }
       } finally {
         if (quoteAbortRef.current === quoteId) {
@@ -141,12 +148,10 @@ export function SwapCard() {
 
   // Auto-quote with debounce
   useEffect(() => {
-    if (quoteTimerRef.current) {
-      clearTimeout(quoteTimerRef.current);
-    }
+    if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
 
     if (!fromToken || !toToken || !amount || parseFloat(amount) <= 0) {
-      setRoute(null);
+      setQuote(null);
       setQuoteLoading(false);
       return;
     }
@@ -155,18 +160,16 @@ export function SwapCard() {
     try {
       amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
     } catch {
-      setRoute(null);
+      setQuote(null);
       setQuoteLoading(false);
       return;
     }
 
     if (amountWei === "0") {
-      setRoute(null);
+      setQuote(null);
       setQuoteLoading(false);
       return;
     }
-
-    const quoteAddr = address || QUOTE_ESTIMATION_ADDRESS;
 
     setQuoteLoading(true);
     setError("");
@@ -174,33 +177,13 @@ export function SwapCard() {
     const quoteId = ++quoteAbortRef.current;
 
     quoteTimerRef.current = setTimeout(() => {
-      fetchQuote(
-        fromChainId,
-        toChainId,
-        fromToken,
-        toToken,
-        amountWei,
-        quoteAddr,
-        slippage,
-        quoteId
-      );
+      fetchQuote(fromChainId, toChainId, fromToken, toToken, amountWei, address || undefined, quoteId);
     }, 1200);
 
     return () => {
-      if (quoteTimerRef.current) {
-        clearTimeout(quoteTimerRef.current);
-      }
+      if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
     };
-  }, [
-    fromChainId,
-    toChainId,
-    fromToken,
-    toToken,
-    amount,
-    address,
-    slippage,
-    fetchQuote,
-  ]);
+  }, [fromChainId, toChainId, fromToken, toToken, amount, address, slippage, fetchQuote]);
 
   const handleFromChainSelect = useCallback((chain: ChainInfo) => {
     setFromChainId(chain.chainId);
@@ -223,25 +206,25 @@ export function SwapCard() {
     setToToken(fromToken);
   }, [fromChainId, toChainId, fromToken, toToken]);
 
-  // Execute swap via Squid
+  // Execute swap via deBridge
   const handleSwap = useCallback(async () => {
     if (!walletClient || !address || !fromToken || !toToken || !amount) return;
+    if (!isEvmChain(fromChainId)) {
+      setError("Solana as source chain requires a Solana wallet (coming soon)");
+      return;
+    }
 
     setError("");
     setStep("fetching-route");
 
     try {
-      const amountWei = ethers.utils
-        .parseUnits(amount, fromToken.decimals)
-        .toString();
+      const amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
 
-      // Ensure wallet is on the correct chain (EVM only)
-      if (isEvmChain(fromChainId)) {
-        const requiredChainId = parseInt(fromChainId);
-        if (walletChainId !== requiredChainId) {
-          setStep("approving");
-          await switchChainAsync({ chainId: requiredChainId });
-        }
+      // Ensure wallet is on the correct source chain
+      const requiredChainId = parseInt(fromChainId);
+      if (walletChainId !== requiredChainId) {
+        setStep("approving");
+        await switchChainAsync({ chainId: requiredChainId });
       }
 
       const provider = new ethers.providers.Web3Provider(
@@ -249,65 +232,62 @@ export function SwapCard() {
       );
       const signer = provider.getSigner();
 
-      // Step 1: Get fresh route for full amount
+      // Get fresh quote with wallet addresses for tx generation
       setStep("fetching-route");
 
-      const freshRoute = await getRoute({
-        fromAddress: address,
-        fromChain: fromChainId,
-        fromToken: fromToken.address,
-        fromAmount: amountWei,
-        toChain: toChainId,
-        toToken: toToken.address,
-        toAddress: address,
-        slippage,
-        slippageConfig: { autoMode: 1 },
-        enableBoost: true,
+      // For Solana destination, user needs to provide a Solana address.
+      // For now we handle EVM→EVM and EVM→Solana (Solana as destination only for quoting)
+      const dstAddress = isSolanaChain(toChainId) ? undefined : address;
+
+      const freshQuote = await getQuote({
+        srcChainId: fromChainId,
+        srcChainTokenIn: fromToken.address,
+        srcChainTokenInAmount: amountWei,
+        dstChainId: toChainId,
+        dstChainTokenOut: toToken.address,
+        prependOperatingExpenses: true,
+        srcChainOrderAuthorityAddress: address,
+        dstChainOrderAuthorityAddress: dstAddress,
+        dstChainTokenOutRecipient: dstAddress,
       });
 
-      const routeData = freshRoute.data as RouteResponse;
-      setRoute(routeData);
-      setRequestId(freshRoute.requestId);
+      setQuote(freshQuote);
 
-      // Step 2: Approve token for swap (if ERC20, EVM chains only)
-      if (isEvmChain(fromChainId) && fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+      if (!freshQuote.tx) {
+        throw new Error("No transaction data returned. Destination wallet address may be required.");
+      }
+
+      // Approve token if ERC20 (not native)
+      if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
         setStep("approving");
 
-        const tokenContract = new ethers.Contract(
-          fromToken.address,
-          ERC20_ABI,
-          signer
-        );
-        const targetAddress = routeData.route.transactionRequest.target;
-        const currentAllowance = await tokenContract.allowance(
-          address,
-          targetAddress
-        );
+        const tokenContract = new ethers.Contract(fromToken.address, ERC20_ABI, signer);
+        const targetAddress = freshQuote.tx.to;
+        if (!targetAddress) throw new Error("No target address for approval");
 
-        const amountBN = ethers.BigNumber.from(amountWei);
+        // Approve the full amount including operating expenses
+        const approveAmount = freshQuote.estimation.srcChainTokenIn.amount;
+        const currentAllowance = await tokenContract.allowance(address, targetAddress);
+        const amountBN = ethers.BigNumber.from(approveAmount);
+
         if (currentAllowance.lt(amountBN)) {
-          const approveTx = await tokenContract.approve(
-            targetAddress,
-            ethers.constants.MaxUint256
-          );
+          const approveTx = await tokenContract.approve(targetAddress, ethers.constants.MaxUint256);
           await approveTx.wait();
         }
       }
 
-      // Step 3: Execute the swap
+      // Execute the bridge transaction
       setStep("swapping");
 
-      const tx = routeData.route.transactionRequest;
       const txResponse = await walletClient.sendTransaction({
-        to: tx.target as `0x${string}`,
-        data: tx.data as `0x${string}`,
-        value: BigInt(tx.value),
-        gas: tx.gasLimit ? BigInt(tx.gasLimit) : undefined,
+        to: freshQuote.tx.to as `0x${string}`,
+        data: freshQuote.tx.data as `0x${string}`,
+        value: freshQuote.tx.value ? BigInt(freshQuote.tx.value) : BigInt(0),
       });
 
       setActiveTx({
         hash: txResponse,
-        requestId: freshRoute.requestId,
+        orderId: freshQuote.orderId || "",
         fromChainId,
         toChainId,
       });
@@ -323,22 +303,11 @@ export function SwapCard() {
       setError(message);
       setStep("idle");
     }
-  }, [
-    walletClient,
-    address,
-    fromToken,
-    toToken,
-    amount,
-    fromChainId,
-    toChainId,
-    walletChainId,
-    switchChainAsync,
-    slippage,
-  ]);
+  }, [walletClient, address, fromToken, toToken, amount, fromChainId, toChainId, walletChainId, switchChainAsync, slippage]);
 
   const handleTxComplete = useCallback(() => {
     setStep("idle");
-    setRoute(null);
+    setQuote(null);
     setAmount("");
     setActiveTx(null);
   }, []);
@@ -348,40 +317,23 @@ export function SwapCard() {
     setActiveTx(null);
   }, []);
 
-  // Computed values
-  const estimatedOutput = route?.route?.estimate
-    ? formatTokenAmount(route.route.estimate.toAmount, toToken?.decimals || 18)
+  // Computed values from deBridge estimation
+  const estimation = quote?.estimation;
+  const estimatedOutput = estimation?.dstChainTokenOut
+    ? formatTokenAmount(estimation.dstChainTokenOut.recommendedAmount || estimation.dstChainTokenOut.amount, toToken?.decimals || 18)
     : null;
-  const estimatedMinOutput = route?.route?.estimate
-    ? formatTokenAmount(
-        route.route.estimate.toAmountMin,
-        toToken?.decimals || 18
-      )
-    : null;
-  const fromAmountUSD = route?.route?.estimate?.fromAmountUSD;
-  const toAmountUSD = route?.route?.estimate?.toAmountUSD;
-  const totalGasUSD = route?.route?.estimate?.gasCosts?.reduce(
-    (sum: number, g: { amountUSD?: string }) =>
-      sum + parseFloat(g.amountUSD || "0"),
-    0
-  );
-  const totalFeesUSD = route?.route?.estimate?.feeCosts?.reduce(
-    (sum: number, f: { amountUSD?: string }) =>
-      sum + parseFloat(f.amountUSD || "0"),
-    0
-  );
-  const estimatedTime = route?.route?.estimate?.estimatedRouteDuration;
+  const fromAmountUSD = estimation?.srcChainTokenIn?.approximateUsdValue;
+  const toAmountUSD = estimation?.dstChainTokenOut?.recommendedApproximateUsdValue || estimation?.dstChainTokenOut?.approximateUsdValue;
+  const fulfillmentDelay = quote?.order?.approximateFulfillmentDelay;
 
   const isValidInput = fromToken && toToken && amount && parseFloat(amount) > 0;
-  const isEvmChain = (chainId: string) => !isNaN(parseInt(chainId));
+  const isSolanaSource = isSolanaChain(fromChainId);
   const needsChainSwitch =
     isConnected && isEvmChain(fromChainId) && walletChainId !== parseInt(fromChainId);
-  const isSolanaSource = fromChainId === "solana";
 
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-5 shadow-2xl shadow-black/30">
-
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -435,20 +387,14 @@ export function SwapCard() {
               value={amount}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                  setAmount(val);
-                }
+                if (val === "" || /^\d*\.?\d*$/.test(val)) setAmount(val);
               }}
               placeholder="0.0"
               className="w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-white text-lg font-medium placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
             />
-            {fromAmountUSD && (
+            {fromAmountUSD !== undefined && (
               <div className="text-xs text-gray-500 mt-1 pl-1">
-                $
-                {parseFloat(fromAmountUSD).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                ${fromAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             )}
           </div>
@@ -458,7 +404,7 @@ export function SwapCard() {
         <div className="flex justify-center -my-2 relative z-10">
           <button
             onClick={handleSwapDirection}
-            className="w-10 h-10 bg-gray-800 border-2 border-gray-700 rounded-xl flex items-center justify-center hover:border-green-500/50 hover:bg-gray-700 transition-all duration-200 group"
+            className="w-9 h-9 rounded-full bg-gray-800 border-2 border-gray-700 hover:border-violet-500/50 flex items-center justify-center transition-all group hover:scale-105"
           >
             <svg
               className="w-5 h-5 text-gray-400 group-hover:text-violet-400 transition-colors"
@@ -466,12 +412,7 @@ export function SwapCard() {
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
             </svg>
           </button>
         </div>
@@ -511,23 +452,12 @@ export function SwapCard() {
               <>
                 <div className="text-xl font-bold text-violet-400">
                   {estimatedOutput}{" "}
-                  <span className="text-base text-violet-400/70">
-                    {toToken.symbol}
-                  </span>
+                  <span className="text-base text-violet-400/70">{toToken.symbol}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {toAmountUSD && (
+                  {toAmountUSD !== undefined && (
                     <span className="text-xs text-gray-400">
-                      $
-                      {parseFloat(toAmountUSD).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  )}
-                  {estimatedMinOutput && (
-                    <span className="text-xs text-gray-500">
-                      · Min: {estimatedMinOutput} {toToken.symbol}
+                      ${toAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   )}
                 </div>
@@ -539,51 +469,37 @@ export function SwapCard() {
         </div>
 
         {/* Route Details */}
-        {route && (
+        {quote && estimation && (
           <div className="mt-3 p-3 bg-gray-800/20 rounded-xl border border-gray-700/20 space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Exchange Rate</span>
-              <span className="text-gray-300">
-                1 {fromToken?.symbol} ≈{" "}
-                {parseFloat(
-                  route.route.estimate.exchangeRate
-                ).toFixed(4)}{" "}
-                {toToken?.symbol}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Price Impact</span>
-              <span
-                className={
-                  parseFloat(
-                    route.route.estimate.aggregatePriceImpact || "0"
-                  ) > 3
-                    ? "text-red-400"
-                    : "text-gray-300"
-                }
-              >
-                {route.route.estimate.aggregatePriceImpact}%
-              </span>
-            </div>
-            {totalGasUSD !== undefined && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Gas Cost</span>
-                <span className="text-gray-300">${totalGasUSD.toFixed(2)}</span>
-              </div>
-            )}
-            {totalFeesUSD !== undefined && totalFeesUSD > 0 && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Bridge Fee</span>
-                <span className="text-gray-300">
-                  ${totalFeesUSD.toFixed(2)}
-                </span>
-              </div>
-            )}
-            {estimatedTime && (
+            {fulfillmentDelay !== undefined && (
               <div className="flex justify-between text-xs">
                 <span className="text-gray-400">Est. Time</span>
                 <span className="text-gray-300">
-                  ~{Math.ceil(estimatedTime / 60)} min
+                  {fulfillmentDelay < 60 ? `~${fulfillmentDelay}s` : `~${Math.ceil(fulfillmentDelay / 60)} min`}
+                </span>
+              </div>
+            )}
+            {estimation.srcChainTokenIn?.approximateUsdValue !== undefined &&
+              estimation.dstChainTokenOut?.approximateUsdValue !== undefined && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Exchange Rate</span>
+                <span className="text-gray-300">
+                  1 {fromToken?.symbol} ≈{" "}
+                  {(
+                    estimation.dstChainTokenOut.approximateUsdValue /
+                    estimation.srcChainTokenIn.approximateUsdValue *
+                    parseFloat(ethers.utils.formatUnits(estimation.srcChainTokenIn.amount, fromToken?.decimals || 18)) /
+                    parseFloat(ethers.utils.formatUnits(estimation.dstChainTokenOut.amount, toToken?.decimals || 18))
+                  ).toFixed(4)}{" "}
+                  {toToken?.symbol}
+                </span>
+              </div>
+            )}
+            {quote.fixFee && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Protocol Fee</span>
+                <span className="text-gray-300">
+                  {ethers.utils.formatUnits(quote.fixFee, 18)} {SUPPORTED_CHAINS.find(c => c.chainId === fromChainId)?.nativeCurrency}
                 </span>
               </div>
             )}
@@ -616,7 +532,7 @@ export function SwapCard() {
           ) : step === "tracking" && activeTx ? (
             <TransactionStatus
               txHash={activeTx.hash}
-              requestId={activeTx.requestId}
+              orderId={activeTx.orderId}
               fromChainId={activeTx.fromChainId}
               toChainId={activeTx.toChainId}
               onComplete={handleTxComplete}
@@ -626,55 +542,31 @@ export function SwapCard() {
             <button
               onClick={async () => {
                 try {
-                  if (isEvmChain(fromChainId)) {
-                    await switchChainAsync({ chainId: parseInt(fromChainId) });
-                  }
+                  await switchChainAsync({ chainId: parseInt(fromChainId) });
                 } catch {
                   setError("Failed to switch chain");
                 }
               }}
               className="w-full py-3 px-4 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-xl font-semibold text-sm hover:bg-yellow-500/30 transition-colors"
             >
-              Switch to{" "}
-              {SUPPORTED_CHAINS.find((c) => c.chainId === fromChainId)?.name}
+              Switch to {SUPPORTED_CHAINS.find((c) => c.chainId === fromChainId)?.name}
             </button>
           ) : !isValidInput ? (
-            <button
-              disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed"
-            >
+            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed">
               Enter an amount
             </button>
           ) : quoteLoading ? (
-            <button
-              disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-violet-500/50 text-white cursor-wait"
-            >
+            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-violet-500/50 text-white cursor-wait">
               <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
                 Getting best price...
               </span>
             </button>
-          ) : !route ? (
-            <button
-              disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed"
-            >
+          ) : !quote ? (
+            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed">
               {error ? "No route available" : "Enter an amount"}
             </button>
           ) : (
@@ -690,60 +582,24 @@ export function SwapCard() {
               {step === "fetching-route" ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   Finding best route...
                 </span>
               ) : step === "approving" ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   Confirm in wallet...
                 </span>
               ) : step === "swapping" ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   Executing swap...
                 </span>
@@ -759,12 +615,12 @@ export function SwapCard() {
           <span className="text-xs text-gray-600">
             Powered by{" "}
             <a
-              href="https://squidrouter.com"
+              href="https://debridge.finance"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-500 hover:text-violet-400 transition-colors"
             >
-              Squid Router
+              deBridge
             </a>
           </span>
         </div>
