@@ -150,12 +150,6 @@ export function PrivateBridge() {
 
   // Get quote from Squid API
   const getQuote = useCallback(async () => {
-    // Don't fetch without wallet connection
-    if (!wallet) {
-      setError("Please connect your wallet first")
-      return
-    }
-
     if (!fromAmount || parseFloat(fromAmount) <= 0) {
       setError("Please enter a valid amount")
       return
@@ -181,14 +175,18 @@ export function PrivateBridge() {
       // Convert amount to smallest unit (USDC has 6 decimals)
       const amountInSmallestUnit = (parseFloat(fromAmount) * 1e6).toString()
 
+      // Use wallet address if connected, otherwise use placeholder for quote preview
+      const fromAddress = wallet?.address || "0x0000000000000000000000000000000000000000"
+      const toAddress = wallet?.address || "0x0000000000000000000000000000000000000000"
+
       const params = {
-        fromAddress: wallet.address,
+        fromAddress: fromAddress,
         fromChain: fromChain,
         toChain: toChain,
         fromToken: fromToken,
         toToken: toToken,
         fromAmount: amountInSmallestUnit,
-        toAddress: wallet.address,
+        toAddress: toAddress,
         slippage: 1.5,
         slippageConfig: {
           autoMode: 1,
@@ -232,9 +230,9 @@ export function PrivateBridge() {
     }
   }, [fromAmount, fromChain, toChain, wallet])
 
-  // Auto-fetch quote when amount or chains change (only when wallet connected)
+  // Auto-fetch quote when amount or chains change
   useEffect(() => {
-    if (!autoRefreshEnabled || !wallet) return
+    if (!autoRefreshEnabled) return
 
     const timer = setTimeout(() => {
       if (fromAmount && parseFloat(fromAmount) > 0 && fromChain !== toChain) {
@@ -243,7 +241,7 @@ export function PrivateBridge() {
     }, 1000) // Wait 1 second after user stops typing
 
     return () => clearTimeout(timer)
-  }, [fromAmount, fromChain, toChain, autoRefreshEnabled, wallet, getQuote])
+  }, [fromAmount, fromChain, toChain, autoRefreshEnabled, getQuote])
 
   // Execute swap
   const executeSwap = async () => {
@@ -321,275 +319,271 @@ export function PrivateBridge() {
           </p>
         </div>
 
-        {/* Wallet Connection */}
-        {!wallet ? (
-          <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <WalletIcon className="w-5 h-5" />
-                Connect Your Wallet
+        {/* Bridge Card - Always Visible */}
+        <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
+          <div className="space-y-6">
+            {/* From Section */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label className="text-base">From</Label>
+                <span className="text-xs text-muted-foreground">
+                  {getChainName(fromChain)}
+                </span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                You need to connect your wallet to bridge assets across chains
-              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="0.0"
+                  value={fromAmount}
+                  onChange={(e) => setFromAmount(e.target.value)}
+                  className="bg-background/50 border border-border text-lg"
+                  step="0.0001"
+                  min="0"
+                />
+                <select
+                  value={fromChain}
+                  onChange={(e) => {
+                    setFromChain(e.target.value)
+                    setQuote(null)
+                  }}
+                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
+                >
+                  {chains.map((chain) => (
+                    <option key={chain.id} value={chain.id}>
+                      {chain.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-              {walletError && (
-                <Alert className="border-destructive/50 bg-destructive/10">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                  <AlertDescription className="text-destructive">
-                    {walletError}
-                  </AlertDescription>
-                </Alert>
-              )}
-
+            {/* Swap Button */}
+            <div className="flex justify-center">
               <Button
-                onClick={connectWallet}
-                disabled={connecting}
-                className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-xl text-base py-6"
+                onClick={swapChains}
+                variant="outline"
+                size="sm"
+                className="rounded-full"
               >
-                {connecting ? (
+                <ArrowRight className="w-4 h-4 rotate-90" />
+              </Button>
+            </div>
+
+            {/* To Section */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label className="text-base">To</Label>
+                <span className="text-xs text-muted-foreground">
+                  {getChainName(toChain)}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="0.0"
+                  value={toAmount}
+                  readOnly
+                  className="bg-background/50 border border-border text-lg opacity-70"
+                />
+                <select
+                  value={toChain}
+                  onChange={(e) => {
+                    setToChain(e.target.value)
+                    setQuote(null)
+                  }}
+                  className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
+                >
+                  {chains.map((chain) => (
+                    <option key={chain.id} value={chain.id}>
+                      {chain.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Auto Refresh Toggle */}
+            <div className="flex items-center gap-2 p-3 bg-background/50 rounded border border-border">
+              <input
+                type="checkbox"
+                id="autoRefresh"
+                checked={autoRefreshEnabled}
+                onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="autoRefresh" className="text-sm cursor-pointer">
+                Auto-fetch quotes
+              </label>
+            </div>
+
+            {/* Error Alert */}
+            {error && (
+              <Alert className="border-destructive/50 bg-destructive/10">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertDescription className="text-destructive">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Quote Info */}
+            {quote && (
+              <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <h4 className="font-semibold text-sm">Quote Details</h4>
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Exchange Rate
+                    </p>
+                    <p className="font-mono font-semibold">
+                      {quote.route.exchangeRate}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Price Impact
+                    </p>
+                    <p className="font-mono font-semibold text-yellow-400">
+                      {quote.route.priceImpact}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Min Received
+                    </p>
+                    <p className="font-mono font-semibold">
+                      {(parseFloat(quote.route.minReceived) / 1e6).toFixed(6)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Slippage
+                    </p>
+                    <p className="font-mono font-semibold">
+                      {quote.route.slippage}%
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Quote updated {new Date(quoteTimestamp).toLocaleTimeString()}
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <Button
+                onClick={getQuote}
+                disabled={loading || !fromAmount || fromChain === toChain}
+                className="flex-1 bg-gradient-to-r from-primary to-secondary hover:shadow-xl"
+              >
+                {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
+                    Getting Quote...
                   </>
                 ) : (
                   <>
-                    <WalletIcon className="w-4 h-4 mr-2" />
-                    Connect MetaMask
+                    Get Quote
+                    <RefreshCw className="w-4 h-4 ml-2" />
                   </>
                 )}
               </Button>
-
-              <div className="text-xs text-muted-foreground bg-background/50 p-3 rounded border border-border">
-                <p className="font-semibold mb-2">Requirements:</p>
-                <ul className="space-y-1">
-                  <li>✓ MetaMask or compatible Web3 wallet</li>
-                  <li>✓ Sufficient funds for bridging</li>
-                  <li>✓ Gas fees for both chains</li>
-                </ul>
-              </div>
+              <Button
+                onClick={executeSwap}
+                disabled={!quote || loading || !wallet}
+                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-xl"
+                title={!wallet ? "Connect wallet to bridge" : ""}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Bridge Assets
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
             </div>
-          </Card>
-        ) : (
-          <>
-            {/* Wallet Info */}
-            <Card className="p-4 bg-green-500/10 border border-green-500/30 mb-6">
-              <div className="flex justify-between items-center">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Connected Wallet</p>
-                  <p className="font-mono text-sm">
-                    {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Balance: {wallet.balance} ETH
-                  </p>
-                </div>
-                <Button
-                  onClick={disconnectWallet}
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Disconnect
-                </Button>
-              </div>
-            </Card>
+          </div>
+        </Card>
 
-            {/* Bridge Card */}
-            <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
-              <div className="space-y-6">
-                {/* From Section */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-base">From</Label>
-                    <span className="text-xs text-muted-foreground">
-                      {getChainName(fromChain)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="0.0"
-                      value={fromAmount}
-                      onChange={(e) => setFromAmount(e.target.value)}
-                      className="bg-background/50 border border-border text-lg"
-                      step="0.0001"
-                      min="0"
-                    />
-                    <select
-                      value={fromChain}
-                      onChange={(e) => {
-                        setFromChain(e.target.value)
-                        setQuote(null)
-                      }}
-                      className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
-                    >
-                      {chains.map((chain) => (
-                        <option key={chain.id} value={chain.id}>
-                          {chain.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+        {/* Wallet Connection Card */}
+        <Card className="p-6 bg-card/50 backdrop-blur border border-primary/30 mb-6">
+          <div className="space-y-4">
+            {!wallet ? (
+              <>
+                <div className="flex items-center gap-2 text-lg font-semibold">
+                  <WalletIcon className="w-5 h-5" />
+                  Connect Wallet to Bridge
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Connect your MetaMask wallet to execute the bridge transaction
+                </p>
 
-                {/* Swap Button */}
-                <div className="flex justify-center">
-                  <Button
-                    onClick={swapChains}
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                  >
-                    <ArrowRight className="w-4 h-4 rotate-90" />
-                  </Button>
-                </div>
-
-                {/* To Section */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-base">To</Label>
-                    <span className="text-xs text-muted-foreground">
-                      {getChainName(toChain)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="0.0"
-                      value={toAmount}
-                      readOnly
-                      className="bg-background/50 border border-border text-lg opacity-70"
-                    />
-                    <select
-                      value={toChain}
-                      onChange={(e) => {
-                        setToChain(e.target.value)
-                        setQuote(null)
-                      }}
-                      className="px-4 py-2 bg-background border border-border rounded-md text-foreground font-medium min-w-[140px]"
-                    >
-                      {chains.map((chain) => (
-                        <option key={chain.id} value={chain.id}>
-                          {chain.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Auto Refresh Toggle */}
-                <div className="flex items-center gap-2 p-3 bg-background/50 rounded border border-border">
-                  <input
-                    type="checkbox"
-                    id="autoRefresh"
-                    checked={autoRefreshEnabled}
-                    onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="autoRefresh" className="text-sm cursor-pointer">
-                    Auto-fetch quotes
-                  </label>
-                </div>
-
-                {/* Error Alert */}
-                {error && (
+                {walletError && (
                   <Alert className="border-destructive/50 bg-destructive/10">
                     <AlertCircle className="h-4 w-4 text-destructive" />
                     <AlertDescription className="text-destructive">
-                      {error}
+                      {walletError}
                     </AlertDescription>
                   </Alert>
                 )}
 
-                {/* Quote Info */}
-                {quote && (
-                  <div className="space-y-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                    <h4 className="font-semibold text-sm">Quote Details</h4>
-
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">
-                          Exchange Rate
-                        </p>
-                        <p className="font-mono font-semibold">
-                          {quote.route.exchangeRate}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">
-                          Price Impact
-                        </p>
-                        <p className="font-mono font-semibold text-yellow-400">
-                          {quote.route.priceImpact}%
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">
-                          Min Received
-                        </p>
-                        <p className="font-mono font-semibold">
-                          {(parseFloat(quote.route.minReceived) / 1e18).toFixed(6)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-1">
-                          Slippage
-                        </p>
-                        <p className="font-mono font-semibold">
-                          {quote.route.slippage}%
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      Quote updated {new Date(quoteTimestamp).toLocaleTimeString()}
-                    </p>
+                <Button
+                  onClick={connectWallet}
+                  disabled={connecting}
+                  className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-xl text-base py-6"
+                >
+                  {connecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <WalletIcon className="w-4 h-4 mr-2" />
+                      Connect MetaMask
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-lg font-semibold text-green-400">
+                    <WalletIcon className="w-5 h-5" />
+                    Wallet Connected
                   </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-3">
                   <Button
-                    onClick={getQuote}
-                    disabled={loading || !fromAmount || fromChain === toChain}
-                    className="flex-1 bg-gradient-to-r from-primary to-secondary hover:shadow-xl"
+                    onClick={disconnectWallet}
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
                   >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Getting Quote...
-                      </>
-                    ) : (
-                      <>
-                        Get Quote
-                        <RefreshCw className="w-4 h-4 ml-2" />
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={executeSwap}
-                    disabled={!quote || loading || !wallet}
-                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-xl"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        Bridge Assets
-                        <ArrowRight className="w-4 h-4 ml-2" />
-                      </>
-                    )}
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Disconnect
                   </Button>
                 </div>
-              </div>
-            </Card>
-          </>
-        )}
+
+                <div className="space-y-2 p-3 bg-background/50 rounded border border-green-500/30">
+                  <p className="text-sm text-muted-foreground">Address</p>
+                  <p className="font-mono text-sm break-all">
+                    {wallet.address}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Balance: {wallet.balance} ETH
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
 
         {/* Squid Info Card */}
         <Card className="p-4 bg-card/50 backdrop-blur border border-primary/30">
