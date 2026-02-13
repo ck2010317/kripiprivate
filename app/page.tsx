@@ -29,6 +29,7 @@ import { UserDashboard } from "@/app/components/user-dashboard"
 import { IssueCardFlow } from "@/app/components/issue-card-flow"
 import { CardPurchase } from "@/app/components/card-purchase"
 import { ChatWidget } from "@/app/components/chat-widget"
+import { ReferralDashboard } from "@/app/components/referral-dashboard"
 
 // Scroll Animation Hook
 function useScrollAnimation() {
@@ -208,7 +209,11 @@ function HomeContent() {
           onBack={() => setActiveTab("landing")}
           onCreateCard={() => setActiveTab("issuing")}
           onAdmin={user.email === "shaann950@gmail.com" ? () => setActiveTab("admin") : undefined}
+          onReferrals={() => setActiveTab("referrals")}
         />
+      )}
+      {activeTab === "referrals" && user && (
+        <ReferralDashboard onBack={() => setActiveTab("dashboard")} />
       )}
       {activeTab === "wallet" && <WalletPage setActiveTab={setActiveTab} />}
       {activeTab === "admin" && user && (

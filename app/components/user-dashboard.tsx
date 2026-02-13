@@ -38,9 +38,10 @@ interface UserDashboardProps {
   onBack: () => void
   onCreateCard: () => void
   onAdmin?: () => void
+  onReferrals?: () => void
 }
 
-export function UserDashboard({ onBack, onCreateCard, onAdmin }: UserDashboardProps) {
+export function UserDashboard({ onBack, onCreateCard, onAdmin, onReferrals }: UserDashboardProps) {
   const { user, logout } = useAuth()
   const [cards, setCards] = useState<CardData[]>([])
   const [loading, setLoading] = useState(true)
@@ -192,6 +193,11 @@ export function UserDashboard({ onBack, onCreateCard, onAdmin }: UserDashboardPr
             {onAdmin && (
               <Button variant="outline" size="sm" onClick={onAdmin} className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10">
                 ⚡ Admin
+              </Button>
+            )}
+            {onReferrals && (
+              <Button variant="outline" size="sm" onClick={onReferrals} className="border-green-500/50 text-green-400 hover:bg-green-500/10">
+                🎁 Referrals
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>

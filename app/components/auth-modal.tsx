@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { X, Loader2, Eye, EyeOff, Mail, Lock, User } from "lucide-react"
+import { X, Loader2, Eye, EyeOff, Mail, Lock, User, Gift } from "lucide-react"
 import { useAuth } from "@/app/context/auth-context"
 
 interface AuthModalProps {
@@ -21,8 +21,22 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultMode = "login" }:
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [referralCode, setReferralCode] = useState("")
 
   const { login, signup } = useAuth()
+
+  // Capture referral code from URL (?ref=xxx)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const ref = params.get("ref")
+      if (ref) {
+        setReferralCode(ref)
+        // Auto-switch to signup when coming from a referral link
+        setMode("signup")
+      }
+    }
+  }, [])
 
   if (!isOpen) return null
 
@@ -46,7 +60,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultMode = "login" }:
           setLoading(false)
           return
         }
-        const result = await signup(email, password, name)
+        const result = await signup(email, password, name, referralCode || undefined)
         if (result.success) {
           onSuccess?.()
           onClose()
@@ -164,6 +178,25 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultMode = "login" }:
               </button>
             </div>
           </div>
+
+          {mode === "signup" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-1">
+                <Gift className="w-4 h-4 text-green-500" />
+                Referral Code <span className="text-muted-foreground text-xs">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value)}
+                placeholder="Enter referral code"
+                className="w-full px-4 py-3 rounded-lg bg-input border border-border/50 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none transition-all text-sm"
+              />
+              {referralCode && (
+                <p className="text-xs text-green-500">🎉 You were referred! Create a card to earn your referrer $5.</p>
+              )}
+            </div>
+          )}
 
           <Button
             type="submit"

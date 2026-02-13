@@ -233,6 +233,54 @@ export async function POST(
           },
         })
 
+        // === REFERRAL REWARD ===
+        // Check if this user was referred by someone — credit $5 reward
+        try {
+          const fullUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { referredById: true, email: true },
+          })
+
+          if (fullUser?.referredById) {
+            // Check this is the user's FIRST card (only reward once per referred user)
+            const userCardCount = await prisma.card.count({
+              where: { userId: user.id },
+            })
+
+            if (userCardCount === 1) {
+              // This is their first card — credit the referrer
+              const REFERRAL_REWARD = 5  // $5
+              const REFERRAL_POINTS = 10 // 10 points
+
+              await prisma.$transaction([
+                prisma.user.update({
+                  where: { id: fullUser.referredById },
+                  data: {
+                    referralPoints: { increment: REFERRAL_POINTS },
+                    referralEarnings: { increment: REFERRAL_REWARD },
+                    referralCardCount: { increment: 1 },
+                  },
+                }),
+                prisma.referralLog.create({
+                  data: {
+                    referrerId: fullUser.referredById,
+                    referredEmail: fullUser.email,
+                    rewardAmount: REFERRAL_REWARD,
+                    points: REFERRAL_POINTS,
+                    cardId: card.id,
+                    paymentId: payment.id,
+                  },
+                }),
+              ])
+
+              console.log(`[Referral] ✅ Credited $${REFERRAL_REWARD} + ${REFERRAL_POINTS} pts to referrer ${fullUser.referredById} for user ${fullUser.email}`)
+            }
+          }
+        } catch (refErr) {
+          // Don't fail the card creation if referral credit fails
+          console.error("[Referral] ❌ Failed to credit referral reward:", refErr)
+        }
+
         return NextResponse.json({
           success: true,
           message: "Payment received! Your card is being set up and will appear in your dashboard once ready. This can take up to 4 hours.",

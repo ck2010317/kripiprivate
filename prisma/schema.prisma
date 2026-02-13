@@ -18,10 +18,49 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
+  // Referral system
+  referralCode  String?  @unique            // Unique code for sharing (generated on first access)
+  referredById  String?                             // Who referred this user
+  referredBy    User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("UserReferrals") // Users this user referred
+  
+  // Referral rewards
+  referralPoints    Int      @default(0)   // Total points earned
+  referralEarnings  Float    @default(0)   // Total $ earned from referrals
+  referralCardCount Int      @default(0)   // Number of successful card referrals
+  
   cards         Card[]
   sessions      Session[]
   payments      Payment[]
   apiKeys       ApiKey[]
+  referralLogs  ReferralLog[]  // Logs of referral rewards earned
+}
+
+model ReferralLog {
+  id            String   @id @default(cuid())
+  
+  // Who earned the reward
+  referrerId    String
+  referrer      User     @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  
+  // Who was referred (the new user who made a card)
+  referredEmail String   // Email of the person who signed up + created card
+  
+  // Reward details
+  rewardAmount  Float    @default(5)   // $5 reward
+  points        Int      @default(10)  // Points earned
+  
+  // What triggered it
+  cardId        String   // The card that was successfully created
+  paymentId     String   // The payment that was completed
+  
+  // Status
+  status        String   @default("CREDITED")  // CREDITED, PENDING, etc.
+  
+  createdAt     DateTime @default(now())
+
+  @@index([referrerId])
+  @@index([createdAt])
 }
 
 model Card {
