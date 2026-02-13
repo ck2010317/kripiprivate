@@ -42,7 +42,23 @@ export async function POST(req: NextRequest) {
     const plan = ctx.apiKey.plan;
     const markup = amount * (plan.markupPercent / 100);
     const totalCardLoad = amount; // Customer gets the full amount on card
-    const fee = plan.cardIssueFee + markup;
+    const fee = plan.cardIssueFee + markup + plan.cardFundFee;
+    const totalCost = amount + fee; // Card load + all fees
+
+    // Check wallet balance (skip for test mode)
+    if (!ctx.apiKey.isTest) {
+      if (ctx.apiKey.walletBalance < totalCost) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "insufficient_balance",
+              message: `Insufficient PrivatePay wallet balance. Required: $${totalCost.toFixed(2)} (card: $${amount}, fees: $${fee.toFixed(2)}). Available: $${ctx.apiKey.walletBalance.toFixed(2)}. Deposit funds first.`,
+            },
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     // Test mode: return fake card
     if (ctx.apiKey.isTest) {
@@ -89,30 +105,55 @@ export async function POST(req: NextRequest) {
         email: email.toLowerCase().trim(),
       });
 
-      // Save to our database
-      const apiCard = await prisma.apiCard.create({
-        data: {
-          apiKeyId: ctx.apiKey.id,
-          kripiCardId: result.card_id,
-          cardNumber: result.card_number,
-          expiryDate: result.expiry_date,
-          cvv: result.cvv,
-          nameOnCard: name_on_card.toUpperCase().trim(),
-          balance: result.balance,
-          status: "ACTIVE",
-          externalId: external_id || null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-        },
-      });
-
-      // Update API key stats
-      await prisma.apiKey.update({
-        where: { id: ctx.apiKey.id },
-        data: {
-          totalCards: { increment: 1 },
-          totalVolume: { increment: amount },
-        },
-      });
+      // Deduct from developer's wallet balance
+      const newBalance = ctx.apiKey.walletBalance - totalCost;
+      
+      // Save card + update wallet + log transactions in one go
+      const [apiCard] = await prisma.$transaction([
+        prisma.apiCard.create({
+          data: {
+            apiKeyId: ctx.apiKey.id,
+            kripiCardId: result.card_id,
+            cardNumber: result.card_number,
+            expiryDate: result.expiry_date,
+            cvv: result.cvv,
+            nameOnCard: name_on_card.toUpperCase().trim(),
+            balance: result.balance,
+            status: "ACTIVE",
+            externalId: external_id || null,
+            metadata: metadata ? JSON.stringify(metadata) : null,
+          },
+        }),
+        prisma.apiKey.update({
+          where: { id: ctx.apiKey.id },
+          data: {
+            walletBalance: newBalance,
+            totalCharged: { increment: totalCost },
+            totalCards: { increment: 1 },
+            totalVolume: { increment: amount },
+          },
+        }),
+        prisma.apiTransaction.create({
+          data: {
+            apiKeyId: ctx.apiKey.id,
+            type: "CARD_LOAD",
+            amount: amount,
+            balanceAfter: newBalance + fee,
+            description: `Card load: $${amount} for ${name_on_card.toUpperCase().trim()}`,
+            reference: result.card_id,
+          },
+        }),
+        prisma.apiTransaction.create({
+          data: {
+            apiKeyId: ctx.apiKey.id,
+            type: "CARD_ISSUE",
+            amount: fee,
+            balanceAfter: newBalance,
+            description: `Card issuance fee: $${plan.cardIssueFee} + ${plan.markupPercent}% markup ($${markup.toFixed(2)}) + $${plan.cardFundFee} funding`,
+            reference: result.card_id,
+          },
+        }),
+      ]);
 
       // Send webhook if configured
       if (ctx.apiKey.webhookUrl) {

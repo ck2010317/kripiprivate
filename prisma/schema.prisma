@@ -184,10 +184,15 @@ model ApiKey {
   rateLimit     Int          @default(100)     // Requests per minute
   monthlyLimit  Int          @default(1000)    // Cards per month
   
+  // Wallet — developer must deposit funds before issuing cards
+  walletBalance Float        @default(0)       // Available balance in USD
+  totalDeposited Float       @default(0)       // Lifetime deposits
+  totalCharged  Float        @default(0)       // Lifetime charges (card fees + markup)
+  
   // Usage tracking
   totalRequests Int          @default(0)
   totalCards    Int          @default(0)
-  totalVolume   Float        @default(0)       // Total USD volume
+  totalVolume   Float        @default(0)       // Total USD card load volume
   
   // Metadata
   allowedIps    String?      // Comma-separated IPs (null = all)
@@ -197,6 +202,7 @@ model ApiKey {
   // Relations
   usage         ApiUsage[]
   apiCards      ApiCard[]
+  transactions  ApiTransaction[]
   
   lastUsedAt    DateTime?
   createdAt     DateTime     @default(now())
@@ -263,6 +269,33 @@ model ApiUsage {
   @@index([apiKeyId])
   @@index([createdAt])
   @@index([apiKeyId, createdAt])
+}
+
+model ApiTransaction {
+  id            String             @id @default(cuid())
+  
+  apiKeyId      String
+  apiKey        ApiKey             @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  
+  type          ApiTransactionType
+  amount        Float              // Positive = credit, displayed as absolute
+  balanceAfter  Float              // Balance after this transaction
+  description   String             // "Deposit via Solana", "Card issuance fee", etc.
+  reference     String?            // tx hash, card ID, etc.
+  
+  createdAt     DateTime           @default(now())
+
+  @@index([apiKeyId])
+  @@index([createdAt])
+}
+
+enum ApiTransactionType {
+  DEPOSIT       // Developer adds funds to wallet
+  CARD_ISSUE    // Fee charged when issuing a card
+  CARD_FUND     // Fee charged when funding a card
+  CARD_LOAD     // Actual card load amount (goes to KripiCard)
+  REFUND        // Refund back to wallet
+  ADJUSTMENT    // Manual admin adjustment
 }
 
 model ApiCard {

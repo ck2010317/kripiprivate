@@ -294,11 +294,19 @@ export default function DeveloperPortal() {
                     </li>
                     <li className="text-sm text-gray-300 flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-violet-400" />
-                      ${plan.card_issue_fee} per card + {plan.markup_percent}% markup
+                      ${plan.card_issue_fee} card issuance fee
                     </li>
                     <li className="text-sm text-gray-300 flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-violet-400" />
-                      ${plan.card_fund_fee} per funding
+                      {plan.markup_percent}% + ${plan.card_fund_fee} per top-up
+                    </li>
+                    <li className="text-sm text-gray-400 flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-gray-600" />
+                      Min top-up: $10
+                    </li>
+                    <li className="text-sm text-violet-300 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-violet-400" />
+                      Customizable fees &amp; card pricing
                     </li>
                     {plan.features.webhooks && (
                       <li className="text-sm text-gray-300 flex items-center gap-2">

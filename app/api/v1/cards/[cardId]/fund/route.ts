@@ -53,6 +53,23 @@ export async function POST(
     }
 
     const fee = ctx.apiKey.plan.cardFundFee;
+    const markup = amount * (ctx.apiKey.plan.markupPercent / 100);
+    const totalCost = amount + fee + markup;
+
+    // Check wallet balance (skip for test mode)
+    if (!ctx.apiKey.isTest) {
+      if (ctx.apiKey.walletBalance < totalCost) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "insufficient_balance",
+              message: `Insufficient wallet balance. Required: $${totalCost.toFixed(2)}. Available: $${ctx.apiKey.walletBalance.toFixed(2)}.`,
+            },
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     // Test mode
     if (ctx.apiKey.isTest) {
@@ -87,16 +104,33 @@ export async function POST(
         amount,
       });
 
-      await prisma.apiCard.update({
-        where: { id: card.id },
-        data: { balance: result.new_balance },
-      });
+      // Deduct from wallet
+      const newWalletBalance = ctx.apiKey.walletBalance - totalCost;
 
-      // Update volume
-      await prisma.apiKey.update({
-        where: { id: ctx.apiKey.id },
-        data: { totalVolume: { increment: amount } },
-      });
+      await prisma.$transaction([
+        prisma.apiCard.update({
+          where: { id: card.id },
+          data: { balance: result.new_balance },
+        }),
+        prisma.apiKey.update({
+          where: { id: ctx.apiKey.id },
+          data: {
+            walletBalance: newWalletBalance,
+            totalCharged: { increment: totalCost },
+            totalVolume: { increment: amount },
+          },
+        }),
+        prisma.apiTransaction.create({
+          data: {
+            apiKeyId: ctx.apiKey.id,
+            type: "CARD_FUND",
+            amount: totalCost,
+            balanceAfter: newWalletBalance,
+            description: `Fund card $${amount} + fee $${(fee + markup).toFixed(2)}`,
+            reference: card.kripiCardId,
+          },
+        }),
+      ]);
 
       // Webhook
       if (ctx.apiKey.webhookUrl) {
