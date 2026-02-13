@@ -29,6 +29,7 @@ export async function GET() {
       total_requests: k.totalRequests,
       total_cards: k.totalCards,
       total_volume: k.totalVolume,
+      wallet_balance: k.walletBalance,
       last_used_at: k.lastUsedAt?.toISOString() || null,
       created_at: k.createdAt.toISOString(),
     })),
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, plan_name, is_test } = body;
+  const { name, plan_name, is_test, payment_id } = body;
 
   // Find the plan
   const planName = plan_name || "starter";
@@ -53,6 +54,67 @@ export async function POST(req: NextRequest) {
       { error: { code: "invalid_plan", message: `Plan '${planName}' not found.` } },
       { status: 400 }
     );
+  }
+
+  // Live keys require payment verification
+  if (!is_test) {
+    if (!payment_id) {
+      return NextResponse.json(
+        { error: { code: "payment_required", message: "A verified payment_id is required to create a live API key. Buy a package first." } },
+        { status: 402 }
+      );
+    }
+
+    // Verify payment exists, belongs to user, and is verified
+    const payment = await prisma.payment.findUnique({
+      where: { id: payment_id },
+    });
+
+    if (!payment) {
+      return NextResponse.json(
+        { error: { code: "payment_not_found", message: "Payment not found." } },
+        { status: 404 }
+      );
+    }
+
+    if (payment.userId !== user.id) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Payment does not belong to you." } },
+        { status: 403 }
+      );
+    }
+
+    if (payment.status !== "VERIFIED" && payment.status !== "COMPLETED") {
+      return NextResponse.json(
+        { error: { code: "payment_not_verified", message: `Payment is not verified (status: ${payment.status}). Please complete payment first.` } },
+        { status: 402 }
+      );
+    }
+
+    // Check that the payment amount matches the plan price (within tolerance)
+    if (payment.amountUsd < plan.priceMonthly * 0.95) {
+      return NextResponse.json(
+        { error: { code: "insufficient_payment", message: `Payment of $${payment.amountUsd.toFixed(2)} does not cover plan price of $${plan.priceMonthly.toFixed(2)}.` } },
+        { status: 402 }
+      );
+    }
+
+    // Check if user already has a live key (only one allowed per purchase)
+    const existingLiveKey = await prisma.apiKey.findFirst({
+      where: { userId: user.id, isTest: false, isActive: true },
+    });
+    if (existingLiveKey) {
+      return NextResponse.json(
+        { error: { code: "key_exists", message: "You already have an active live API key." } },
+        { status: 409 }
+      );
+    }
+
+    // Mark payment as completed
+    await prisma.payment.update({
+      where: { id: payment_id },
+      data: { status: "COMPLETED" },
+    });
   }
 
   // Generate key
