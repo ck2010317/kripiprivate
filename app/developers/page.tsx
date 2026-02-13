@@ -84,10 +84,16 @@ export default function DeveloperPortal() {
   }, []);
 
   const fetchPlans = useCallback(async () => {
-    const res = await fetch("/api/v1/plans");
-    if (res.ok) {
-      const data = await res.json();
-      setPlans(data.data || []);
+    try {
+      const res = await fetch("/api/v1/plans");
+      if (res.ok) {
+        const data = await res.json();
+        setPlans(data.data || []);
+      } else {
+        console.error("Failed to fetch plans:", res.status);
+      }
+    } catch (err) {
+      console.error("Plans fetch error:", err);
     }
   }, []);
 
@@ -111,13 +117,18 @@ export default function DeveloperPortal() {
           is_test: keyMode === "test",
         }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setNewKey(data.key);
         setShowCreateForm(false);
         setKeyName("");
         fetchKeys();
+      } else {
+        alert("Error creating API key: " + (data.error?.message || "Unknown error"));
       }
+    } catch (err) {
+      console.error("Create key error:", err);
+      alert("Failed to create API key. Check console for details.");
     } finally {
       setCreating(false);
     }
@@ -225,7 +236,7 @@ export default function DeveloperPortal() {
                 </div>
                 <pre className="p-5 text-sm font-mono overflow-x-auto">
                   <code className="text-gray-300">
-{`curl -X POST https://privatepay.co/api/v1/cards \\
+{`curl -X POST https://privatepay.site/api/v1/cards \\
   -H "Authorization: Bearer ppay_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -521,21 +532,21 @@ export default function DeveloperPortal() {
               <div className="space-y-4">
                 <CodeBlock
                   title="1. Issue a Card"
-                  code={`curl -X POST https://privatepay.co/api/v1/cards \\
+                  code={`curl -X POST https://privatepay.site/api/v1/cards \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"amount": 50, "name_on_card": "JOHN DOE", "email": "john@example.com"}'`}
                 />
                 <CodeBlock
                   title="2. Fund a Card"
-                  code={`curl -X POST https://privatepay.co/api/v1/cards/CARD_ID/fund \\
+                  code={`curl -X POST https://privatepay.site/api/v1/cards/CARD_ID/fund \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"amount": 25}'`}
                 />
                 <CodeBlock
                   title="3. Get Card Details"
-                  code={`curl https://privatepay.co/api/v1/cards/CARD_ID \\
+                  code={`curl https://privatepay.site/api/v1/cards/CARD_ID \\
   -H "Authorization: Bearer YOUR_API_KEY"`}
                 />
               </div>
@@ -552,7 +563,7 @@ export default function DeveloperPortal() {
         )}
       </div>
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </div>
   );
 }

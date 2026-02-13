@@ -12,7 +12,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-const BASE_URL = "https://privatepay.co";
+const BASE_URL = "https://privatepay.site";
 
 interface Endpoint {
   method: string;
