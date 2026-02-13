@@ -377,6 +377,14 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
               PrivateBridge
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
+            <Button
+              size="lg"
+              className="bg-gradient-to-r from-emerald-500 to-cyan-600 hover:shadow-xl hover:shadow-emerald-500/40 text-white group font-semibold transition-all duration-300 border border-emerald-500/30"
+              onClick={() => window.open("/developers", "_blank")}
+            >
+              API for Developers
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
           </div>
 
           {/* Feature grid */}

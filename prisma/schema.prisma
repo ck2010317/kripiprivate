@@ -21,6 +21,7 @@ model User {
   cards         Card[]
   sessions      Session[]
   payments      Payment[]
+  apiKeys       ApiKey[]
 }
 
 model Card {
@@ -153,5 +154,145 @@ enum TransactionType {
   UNFREEZE  // Card was unfrozen
   REFUND    // Transaction refund
   BALANCE_SYNC  // Balance synced from KripiCard
+}
+
+// ============================================
+// PrivatePay API Product Models
+// ============================================
+
+model ApiKey {
+  id            String       @id @default(cuid())
+  
+  // Key info
+  key           String       @unique  // ppay_live_xxxx or ppay_test_xxxx
+  name          String       @default("Default")
+  hashedKey     String       // SHA-256 hash for lookup
+  
+  // Owner
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Plan & limits
+  planId        String
+  plan          ApiPlan      @relation(fields: [planId], references: [id])
+  
+  // Status
+  isActive      Boolean      @default(true)
+  isTest        Boolean      @default(false)  // Test mode key
+  
+  // Rate limiting
+  rateLimit     Int          @default(100)     // Requests per minute
+  monthlyLimit  Int          @default(1000)    // Cards per month
+  
+  // Usage tracking
+  totalRequests Int          @default(0)
+  totalCards    Int          @default(0)
+  totalVolume   Float        @default(0)       // Total USD volume
+  
+  // Metadata
+  allowedIps    String?      // Comma-separated IPs (null = all)
+  webhookUrl    String?      // Webhook for events
+  webhookSecret String?      // HMAC secret for webhook signatures
+  
+  // Relations
+  usage         ApiUsage[]
+  apiCards      ApiCard[]
+  
+  lastUsedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([hashedKey])
+  @@index([userId])
+  @@index([planId])
+}
+
+model ApiPlan {
+  id              String    @id @default(cuid())
+  
+  // Plan details
+  name            String    @unique  // "starter", "growth", "enterprise"
+  displayName     String               // "Starter", "Growth", "Enterprise"
+  priceMonthly    Float                // Monthly price in USD
+  
+  // Limits
+  cardsPerMonth   Int                  // Max cards per month
+  requestsPerMin  Int                  // Rate limit
+  
+  // Fees (charged per card on top of subscription)
+  cardIssueFee    Float                // Fee per card issued
+  cardFundFee     Float                // Fee per funding operation
+  markupPercent   Float     @default(0) // Markup on card load amount
+  
+  // Features
+  liveCards       Boolean   @default(true)
+  testMode        Boolean   @default(true)
+  webhooks        Boolean   @default(false)
+  ipWhitelist     Boolean   @default(false)
+  prioritySupport Boolean   @default(false)
+  dedicatedBin    Boolean   @default(false)
+  customBranding  Boolean   @default(false)
+  
+  // Relations
+  apiKeys         ApiKey[]
+  
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ApiUsage {
+  id            String   @id @default(cuid())
+  
+  // Tracking
+  apiKeyId      String
+  apiKey        ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  
+  // Usage details
+  endpoint      String   // "/v1/cards", "/v1/cards/:id/fund", etc.
+  method        String   // "POST", "GET", etc.
+  statusCode    Int      // HTTP response code
+  responseTime  Int      // ms
+  
+  // Request info
+  ipAddress     String?
+  userAgent     String?
+  
+  createdAt     DateTime @default(now())
+
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([apiKeyId, createdAt])
+}
+
+model ApiCard {
+  id              String   @id @default(cuid())
+  
+  // API key that created this card
+  apiKeyId        String
+  apiKey          ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  
+  // KripiCard mapping
+  kripiCardId     String?  @unique
+  
+  // Card details (encrypted in prod)
+  cardNumber      String   @default("")
+  expiryDate      String   @default("")
+  cvv             String   @default("")
+  nameOnCard      String
+  
+  // Status
+  balance         Float    @default(0)
+  status          CardStatus @default(ACTIVE)
+  
+  // External reference (customer's own ID)
+  externalId      String?
+  metadata        String?  // JSON string
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([apiKeyId])
+  @@index([externalId])
 }
 
