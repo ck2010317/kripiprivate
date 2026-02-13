@@ -704,6 +704,9 @@ export async function POST(request: NextRequest) {
 
         // Get transactions from KripiCard for the first (or only) card
         const card = userCards[0]
+        if (!card.kripiCardId) {
+          return NextResponse.json({ response: `Card •••• ${card.cardNumber.slice(-4)} is still being provisioned. No transactions yet.`, action: null })
+        }
         try {
           const details = await getCardDetails(card.kripiCardId)
           const transactions = (details as any).transactions || []

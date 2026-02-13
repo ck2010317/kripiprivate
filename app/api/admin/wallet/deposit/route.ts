@@ -94,7 +94,7 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    data: keys.map((k) => ({
+    data: keys.map((k: typeof keys[number]) => ({
       id: k.id,
       name: k.name,
       developer_email: k.user.email,

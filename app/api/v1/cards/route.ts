@@ -214,7 +214,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({
-      data: cards.map((c) => ({
+      data: cards.map((c: typeof cards[number]) => ({
         id: c.id,
         card_id: c.kripiCardId,
         card_number: c.cardNumber,

@@ -12,6 +12,10 @@ export interface ApiContext {
     rateLimit: number;
     monthlyLimit: number;
     totalCards: number;
+    walletBalance: number;
+    totalDeposited: number;
+    totalCharged: number;
+    totalVolume: number;
     allowedIps: string | null;
     webhookUrl: string | null;
     webhookSecret: string | null;
@@ -192,6 +196,10 @@ export async function withApiKey(
       rateLimit: apiKeyRecord.rateLimit,
       monthlyLimit: apiKeyRecord.monthlyLimit,
       totalCards: apiKeyRecord.totalCards,
+      walletBalance: apiKeyRecord.walletBalance,
+      totalDeposited: apiKeyRecord.totalDeposited,
+      totalCharged: apiKeyRecord.totalCharged,
+      totalVolume: apiKeyRecord.totalVolume,
       allowedIps: apiKeyRecord.allowedIps,
       webhookUrl: apiKeyRecord.webhookUrl,
       webhookSecret: apiKeyRecord.webhookSecret,

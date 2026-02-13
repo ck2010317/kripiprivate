@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Copy, Check, Loader2 } from "lucide-react"
 import dynamic from "next/dynamic"
 
-const QRCode = dynamic(() => import("qrcode.react"), { ssr: false })
+const QRCode = dynamic(() => import("qrcode.react").then(mod => mod.QRCodeSVG), { ssr: false })
 
 interface DepositRequest {
   id: string
