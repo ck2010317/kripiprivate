@@ -29,3 +29,4 @@ bun-debug.log
 next-env.d.ts
 
 /lib/generated/prisma
+.agent-hackathon.json
