@@ -61,7 +61,7 @@ Every product in the ecosystem shares the same on-chain payment verification eng
    → CoinGecko API: real-time SOL/USD price (60s cache, 2% buffer)
    → Calculates exact SOL amount with unique precision
 3. User sends SOL from any wallet (Phantom, Solflare, etc.)
-   → To treasury wallet: 2WWEW2Ry4XvBP1eQWuS1iKb515UBnkFDuLUsbwYvbxqj
+   → To treasury wallet: F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t
 4. POST /api/payments/auto-verify
    → Helius RPC: getSignaturesForAddress (last 100 txs)
    → getTransaction for each: extracts sender, amount, timestamp

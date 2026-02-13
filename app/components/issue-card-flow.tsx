@@ -50,7 +50,7 @@ const SERVICE_FEE_PERCENT = 0.03 // 3%
 const SERVICE_FEE_FLAT = 1 // $1
 
 // Token gate requirements
-const REQUIRED_TOKEN_AMOUNT = 1000
+const REQUIRED_TOKEN_AMOUNT = 10000000
 
 export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
   const { user, logout } = useAuth()

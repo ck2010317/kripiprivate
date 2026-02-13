@@ -4,7 +4,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js"
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=f3417b56-61ad-4ba8-b0f9-3695ea859a58"
 
 // Your wallet address where users send payments
-const PAYMENT_WALLET = process.env.PAYMENT_WALLET || "2WWEW2Ry4XvBP1eQWuS1iKb515UBnkFDuLUsbwYvbxqj"
+const PAYMENT_WALLET = process.env.PAYMENT_WALLET || "F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t"
 
 // Create Solana connection
 export function getConnection(): Connection {

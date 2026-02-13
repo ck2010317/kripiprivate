@@ -1688,7 +1688,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">SOL Deposit Address</p>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded break-all">2WWEW2Ry4XvBP1eQWuS1iKb515UBnkFDuLUsbwYvbxqj</code>
+                      <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded break-all">F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t</code>
                     </div>
                   </div>
                   <div>

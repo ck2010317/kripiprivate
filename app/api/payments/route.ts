@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { usdToSol } from "@/lib/solana-payment"
 
-const PAYMENT_WALLET = process.env.PAYMENT_WALLET || "2WWEW2Ry4XvBP1eQWuS1iKb515UBnkFDuLUsbwYvbxqj"
+const PAYMENT_WALLET = process.env.PAYMENT_WALLET || "F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t"
 
 // Create a new payment request
 export async function POST(request: NextRequest) {
