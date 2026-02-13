@@ -269,8 +269,8 @@ export default function DeveloperPortal() {
                   )}
                   <h3 className="text-xl font-bold text-white mb-1">{plan.display_name}</h3>
                   <div className="flex items-baseline gap-1 mb-4">
-                    <span className="text-3xl font-bold text-white">${(plan.price_monthly / 100).toLocaleString()}</span>
-                    <span className="text-gray-500">/mo</span>
+                    <span className="text-3xl font-bold text-white">${plan.price_monthly.toLocaleString()}</span>
+                    <span className="text-gray-500">one-time</span>
                   </div>
                   <ul className="space-y-2 mb-6">
                     <li className="text-sm text-gray-300 flex items-center gap-2">
@@ -608,8 +608,8 @@ const defaultPlans: PlanData[] = [
     price_monthly: 2999,
     cards_per_month: 500,
     requests_per_minute: 60,
-    card_issue_fee: 5,
-    card_fund_fee: 2,
+    card_issue_fee: 20,
+    card_fund_fee: 1,
     markup_percent: 3,
     features: { live_cards: true, test_mode: true },
   },
@@ -619,23 +619,9 @@ const defaultPlans: PlanData[] = [
     price_monthly: 7999,
     cards_per_month: 2500,
     requests_per_minute: 200,
-    card_issue_fee: 3,
+    card_issue_fee: 9,
     card_fund_fee: 1,
     markup_percent: 2,
     features: { live_cards: true, test_mode: true, webhooks: true, ip_whitelist: true, priority_support: true },
-  },
-  {
-    name: "enterprise",
-    display_name: "Enterprise",
-    price_monthly: 19999,
-    cards_per_month: 10000,
-    requests_per_minute: 500,
-    card_issue_fee: 1.5,
-    card_fund_fee: 0.5,
-    markup_percent: 1,
-    features: {
-      live_cards: true, test_mode: true, webhooks: true,
-      ip_whitelist: true, priority_support: true, dedicated_bin: true, custom_branding: true,
-    },
   },
 ];

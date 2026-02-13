@@ -213,7 +213,7 @@ model ApiPlan {
   // Plan details
   name            String    @unique  // "starter", "growth", "enterprise"
   displayName     String               // "Starter", "Growth", "Enterprise"
-  priceMonthly    Float                // Monthly price in USD
+  priceMonthly    Float                // One-time access fee in USD
   
   // Limits
   cardsPerMonth   Int                  // Max cards per month

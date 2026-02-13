@@ -2,18 +2,21 @@
 // Run: npx tsx scripts/seed-api-plans.ts
 
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL || "postgresql://shaan@localhost:5432/privatepay";
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 const plans = [
   {
     name: "starter",
     displayName: "Starter",
-    priceMonthly: 2999, // $2,999/mo
+    priceMonthly: 2999, // $2,999 one-time fee
     cardsPerMonth: 500,
     requestsPerMin: 60,
-    cardIssueFee: 5.0,     // $5 per card issued
-    cardFundFee: 2.0,      // $2 per funding
+    cardIssueFee: 20.0,    // $20 per card issued
+    cardFundFee: 1.0,      // $1 per funding
     markupPercent: 3.0,    // 3% on card load
     liveCards: true,
     testMode: true,
@@ -26,12 +29,12 @@ const plans = [
   {
     name: "growth",
     displayName: "Growth",
-    priceMonthly: 7999, // $7,999/mo
+    priceMonthly: 7999, // $7,999 one-time fee
     cardsPerMonth: 2500,
     requestsPerMin: 200,
-    cardIssueFee: 3.0,
-    cardFundFee: 1.0,
-    markupPercent: 2.0,
+    cardIssueFee: 9.0,     // $9 per card issued
+    cardFundFee: 1.0,      // $1 per funding
+    markupPercent: 2.0,    // 2% on card load
     liveCards: true,
     testMode: true,
     webhooks: true,
@@ -39,23 +42,6 @@ const plans = [
     prioritySupport: true,
     dedicatedBin: false,
     customBranding: false,
-  },
-  {
-    name: "enterprise",
-    displayName: "Enterprise",
-    priceMonthly: 19999, // $19,999/mo
-    cardsPerMonth: 10000,
-    requestsPerMin: 500,
-    cardIssueFee: 1.5,
-    cardFundFee: 0.5,
-    markupPercent: 1.0,
-    liveCards: true,
-    testMode: true,
-    webhooks: true,
-    ipWhitelist: true,
-    prioritySupport: true,
-    dedicatedBin: true,
-    customBranding: true,
   },
 ];
 
