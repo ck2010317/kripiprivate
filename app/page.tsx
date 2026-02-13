@@ -920,7 +920,214 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
           ))}
         </div>
       </div>
+
+      {/* Referral Program & Leaderboard Section */}
+      <PublicReferralSection onLogin={onLogin} user={user} />
+
+      {/* Footer */}
+      <footer className="border-t border-border/50 py-8 px-4 mt-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-primary to-secondary/50 flex items-center justify-center">
+              <CreditCard className="w-3 h-3 text-white" />
+            </div>
+            <span className="font-semibold text-white">PrivatePay</span>
+          </div>
+          <p>© {new Date().getFullYear()} PrivatePay. Privacy-first digital banking.</p>
+        </div>
+      </footer>
     </div>
+  )
+}
+
+// Public Referral Program & Leaderboard — visible on landing page without login
+function PublicReferralSection({ onLogin, user }: { onLogin: () => void; user: { id: string; email: string; name: string } | null }) {
+  const [leaderboard, setLeaderboard] = useState<Array<{
+    rank: number
+    displayName: string
+    points: number
+    earnings: number
+    cardsReferred: number
+  }>>([])
+  const [stats, setStats] = useState<{ totalReferrers: number; totalEarnings: number; totalCards: number } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/referral/leaderboard")
+      .then(res => res.json())
+      .then(data => {
+        if (data.leaderboard) setLeaderboard(data.leaderboard)
+        if (data.totalStats) setStats({
+          totalReferrers: data.totalStats.activeReferrers || 0,
+          totalEarnings: data.totalStats.totalEarnings || 0,
+          totalCards: data.totalStats.totalCardsReferred || 0,
+        })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const rankBadge = (rank: number) => {
+    if (rank === 1) return "🥇"
+    if (rank === 2) return "🥈"
+    if (rank === 3) return "🥉"
+    return `#${rank}`
+  }
+
+  return (
+    <section className="py-16 sm:py-24 px-4 border-t border-border/50" data-scroll-animation="scroll-animate">
+      <div className="max-w-6xl mx-auto">
+        {/* Section Header */}
+        <div className="text-center space-y-4 mb-12 sm:mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-medium mb-4">
+            <span>🎁</span>
+            <span>Referral Rewards Program</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
+            Earn <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400">$5 Per Referral</span>
+          </h2>
+          <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto">
+            Share PrivatePay with friends. When they create their first card, you earn <strong className="text-white">$5 cash reward</strong> + <strong className="text-yellow-400">10 points</strong> instantly.
+          </p>
+        </div>
+
+        {/* How It Works */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 mb-12 sm:mb-16">
+          <div className="text-center space-y-3 p-6 rounded-xl bg-gradient-to-b from-primary/10 to-transparent border border-primary/20">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 flex items-center justify-center mx-auto text-2xl">
+              1️⃣
+            </div>
+            <h3 className="text-lg font-bold text-white">Sign Up & Get Code</h3>
+            <p className="text-sm text-gray-400">Create your PrivatePay account and get a unique referral code instantly</p>
+          </div>
+          <div className="text-center space-y-3 p-6 rounded-xl bg-gradient-to-b from-primary/10 to-transparent border border-primary/20">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 flex items-center justify-center mx-auto text-2xl">
+              2️⃣
+            </div>
+            <h3 className="text-lg font-bold text-white">Share With Friends</h3>
+            <p className="text-sm text-gray-400">Share your link on Twitter, Telegram, or directly — anyone can use it</p>
+          </div>
+          <div className="text-center space-y-3 p-6 rounded-xl bg-gradient-to-b from-primary/10 to-transparent border border-primary/20">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/30 flex items-center justify-center mx-auto text-2xl">
+              3️⃣
+            </div>
+            <h3 className="text-lg font-bold text-white">Earn Rewards</h3>
+            <p className="text-sm text-gray-400">Get $5 + 10 points when your referral creates their first card</p>
+          </div>
+        </div>
+
+        {/* Community Stats */}
+        {stats && (stats.totalReferrers > 0 || stats.totalCards > 0) && (
+          <div className="grid grid-cols-3 gap-4 sm:gap-6 mb-12 sm:mb-16">
+            <div className="text-center p-4 sm:p-6 rounded-xl bg-black/50 border border-primary/20">
+              <p className="text-2xl sm:text-4xl font-bold text-white">{stats.totalReferrers}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-1">Active Referrers</p>
+            </div>
+            <div className="text-center p-4 sm:p-6 rounded-xl bg-black/50 border border-primary/20">
+              <p className="text-2xl sm:text-4xl font-bold text-green-400">${stats.totalEarnings.toFixed(0)}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-1">Total Earned</p>
+            </div>
+            <div className="text-center p-4 sm:p-6 rounded-xl bg-black/50 border border-primary/20">
+              <p className="text-2xl sm:text-4xl font-bold text-yellow-400">{stats.totalCards}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-1">Cards Referred</p>
+            </div>
+          </div>
+        )}
+
+        {/* Leaderboard */}
+        <div className="bg-black/60 rounded-2xl border border-primary/20 overflow-hidden" style={{ boxShadow: '0 0 40px rgba(168, 85, 247, 0.1)' }}>
+          <div className="px-6 py-5 border-b border-primary/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🏆</span>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white">Top Referrers</h3>
+                <p className="text-xs sm:text-sm text-gray-400">Live community leaderboard</p>
+              </div>
+            </div>
+            {!user && (
+              <Button
+                onClick={onLogin}
+                size="sm"
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-semibold rounded-full px-4 sm:px-6"
+              >
+                Join Now
+              </Button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="text-center py-16 space-y-3">
+              <span className="text-4xl">🚀</span>
+              <p className="text-lg font-semibold text-white">Be the First!</p>
+              <p className="text-sm text-gray-400">No referrals yet — start referring friends and claim the #1 spot</p>
+              {!user && (
+                <Button
+                  onClick={onLogin}
+                  className="mt-4 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-semibold rounded-full px-8"
+                >
+                  Sign Up & Start Earning
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-800">
+              {leaderboard.slice(0, 10).map((entry) => (
+                <div
+                  key={entry.rank}
+                  className={`flex items-center justify-between px-6 py-4 transition-colors hover:bg-white/5 ${
+                    entry.rank <= 3 ? "bg-gradient-to-r from-yellow-500/5 to-transparent" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                      entry.rank === 1
+                        ? "bg-gradient-to-br from-yellow-400 to-yellow-600 text-black"
+                        : entry.rank === 2
+                        ? "bg-gradient-to-br from-gray-300 to-gray-400 text-black"
+                        : entry.rank === 3
+                        ? "bg-gradient-to-br from-orange-400 to-orange-600 text-black"
+                        : "bg-gray-800 text-gray-400"
+                    }`}>
+                      {entry.rank <= 3 ? rankBadge(entry.rank) : entry.rank}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white text-sm sm:text-base">{entry.displayName}</p>
+                      <p className="text-xs text-gray-500">{entry.cardsReferred} card{entry.cardsReferred !== 1 ? "s" : ""} referred</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-yellow-400 text-sm sm:text-base">{entry.points} pts</p>
+                    <p className="text-xs text-green-400">${entry.earnings.toFixed(2)} earned</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* CTA at bottom */}
+          {!user && leaderboard.length > 0 && (
+            <div className="px-6 py-5 border-t border-primary/20 bg-gradient-to-r from-primary/10 to-transparent">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-white">Ready to start earning?</p>
+                  <p className="text-sm text-gray-400">Sign up now and get your unique referral code</p>
+                </div>
+                <Button
+                  onClick={onLogin}
+                  className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-semibold rounded-full px-8 whitespace-nowrap"
+                >
+                  🎁 Start Referring
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 
