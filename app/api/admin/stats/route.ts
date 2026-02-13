@@ -27,9 +27,9 @@ export async function GET() {
     const totalDepositVolumeUsd = completedPayments.reduce((sum, p) => sum + p.amountUsd, 0)
     const totalDepositVolumeSol = completedPayments.reduce((sum, p) => sum + p.amountSol, 0)
 
-    // Card issuance volume vs topup volume
+    // Card issuance volume vs topup volume (topups use cardType "topup" or "fund")
     const issuancePayments = completedPayments.filter(p => p.cardType === "issue")
-    const topupPayments = completedPayments.filter(p => p.cardType === "topup")
+    const topupPayments = completedPayments.filter(p => p.cardType === "topup" || p.cardType === "fund")
 
     const issuanceVolumeUsd = issuancePayments.reduce((sum, p) => sum + p.amountUsd, 0)
     const topupVolumeUsd = topupPayments.reduce((sum, p) => sum + p.amountUsd, 0)
