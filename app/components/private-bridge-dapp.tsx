@@ -3,6 +3,13 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  SystemProgram,
+  sendAndConfirmTransaction,
+} from "@solana/web3.js";
 import { ChainSelector } from "./ChainSelector";
 import { TokenSelector } from "./TokenSelector";
 import { TransactionStatus } from "./TransactionStatus";
@@ -26,6 +33,28 @@ import {
   getChainflipBridgeType,
 } from "@/lib/squid";
 
+// Phantom wallet types
+interface PhantomProvider {
+  isPhantom?: boolean;
+  publicKey: { toBase58(): string; toString(): string } | null;
+  connect(): Promise<{ publicKey: { toBase58(): string } }>;
+  disconnect(): Promise<void>;
+  signAndSendTransaction(
+    transaction: Transaction,
+    options?: { skipPreflight?: boolean }
+  ): Promise<{ signature: string }>;
+  isConnected: boolean;
+}
+
+declare global {
+  interface Window {
+    solana?: PhantomProvider;
+    phantom?: { solana?: PhantomProvider };
+  }
+}
+
+const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+
 type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
 interface ActiveTx {
@@ -35,6 +64,11 @@ interface ActiveTx {
   requestId: string;
   quoteId: string;
   bridgeType?: string;
+}
+
+function getPhantomProvider(): PhantomProvider | null {
+  if (typeof window === "undefined") return null;
+  return window.phantom?.solana || window.solana || null;
 }
 
 export function SwapCard() {
@@ -56,6 +90,10 @@ export function SwapCard() {
   // Deposit address for Solana→EVM
   const [depositInfo, setDepositInfo] = useState<{ address: string; trackingId: string } | null>(null);
 
+  // Solana wallet state
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
+  const [solanaConnecting, setSolanaConnecting] = useState(false);
+
   // Debounce ref
   const quoteTimerRef = useRef<NodeJS.Timeout | null>(null);
   const quoteAbortRef = useRef(0);
@@ -66,6 +104,33 @@ export function SwapCard() {
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
+
+  // Auto-detect Phantom wallet connection
+  useEffect(() => {
+    const phantom = getPhantomProvider();
+    if (phantom?.isConnected && phantom.publicKey) {
+      setSolanaAddress(phantom.publicKey.toBase58());
+    }
+  }, []);
+
+  // Connect Phantom wallet
+  const connectPhantom = useCallback(async () => {
+    const phantom = getPhantomProvider();
+    if (!phantom) {
+      window.open("https://phantom.app/", "_blank");
+      return;
+    }
+    try {
+      setSolanaConnecting(true);
+      const resp = await phantom.connect();
+      setSolanaAddress(resp.publicKey.toBase58());
+    } catch (err) {
+      console.error("Phantom connect error:", err);
+      setError("Failed to connect Phantom wallet");
+    } finally {
+      setSolanaConnecting(false);
+    }
+  }, []);
 
   // Initialize tokens on mount
   useEffect(() => {
@@ -95,6 +160,8 @@ export function SwapCard() {
 
   // Placeholder address for estimation when wallet not connected
   const QUOTE_ESTIMATION_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+  // Solana placeholder address for quote estimation
+  const SOLANA_ESTIMATION_ADDRESS = "BnWoJBMZV3M1bBghanUE4PJqg3bqwQaxdA4Y6W3mgMBP";
 
   // Fetch route from Squid Router
   const fetchRoute = useCallback(
@@ -108,8 +175,18 @@ export function SwapCard() {
       quoteId: number
     ) => {
       try {
-        const fromAddr = quoteAddress || QUOTE_ESTIMATION_ADDRESS;
-        const toAddr = quoteAddress || QUOTE_ESTIMATION_ADDRESS;
+        // Use appropriate address based on source chain
+        const isSolSource = isSolanaChain(fChainId);
+        const fromAddr = isSolSource
+          ? (solanaAddress || SOLANA_ESTIMATION_ADDRESS)
+          : (quoteAddress || QUOTE_ESTIMATION_ADDRESS);
+        const toAddr = isSolanaChain(tChainId)
+          ? (solanaAddress || SOLANA_ESTIMATION_ADDRESS)
+          : (quoteAddress || QUOTE_ESTIMATION_ADDRESS);
+
+        const isQuoteOnly = isSolSource
+          ? !solanaAddress
+          : !quoteAddress;
 
         const result = await getRoute({
           fromChain: fChainId,
@@ -120,7 +197,7 @@ export function SwapCard() {
           toToken: tToken.address,
           toAddress: toAddr,
           slippageConfig: { autoMode: 1 },
-          quoteOnly: !quoteAddress,
+          quoteOnly: isQuoteOnly,
         });
 
         if (quoteAbortRef.current === quoteId) {
@@ -145,7 +222,7 @@ export function SwapCard() {
         }
       }
     },
-    [step]
+    [step, solanaAddress]
   );
 
   // Auto-quote with debounce
@@ -185,7 +262,7 @@ export function SwapCard() {
     return () => {
       if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
     };
-  }, [fromChainId, toChainId, fromToken, toToken, amount, address, slippage, fetchRoute]);
+  }, [fromChainId, toChainId, fromToken, toToken, amount, address, solanaAddress, slippage, fetchRoute]);
 
   const handleFromChainSelect = useCallback((chain: ChainInfo) => {
     setFromChainId(chain.chainId);
@@ -208,11 +285,11 @@ export function SwapCard() {
     setToToken(fromToken);
   }, [fromChainId, toChainId, fromToken, toToken]);
 
-  // Execute swap via Squid Router
+  // Execute swap via Squid Router (EVM source)
   const handleSwap = useCallback(async () => {
     if (!walletClient || !address || !fromToken || !toToken || !amount) return;
     if (!isEvmChain(fromChainId)) {
-      setError("Solana as source chain requires a Solana wallet (coming soon)");
+      // Solana source is handled by handleSolanaSwap
       return;
     }
 
@@ -307,6 +384,106 @@ export function SwapCard() {
       setStep("idle");
     }
   }, [walletClient, address, fromToken, toToken, amount, fromChainId, toChainId, walletChainId, switchChainAsync, slippage]);
+
+  // Execute Solana → EVM swap via deposit address flow
+  const handleSolanaSwap = useCallback(async () => {
+    if (!solanaAddress || !fromToken || !toToken || !amount || !address) return;
+    if (!isSolanaChain(fromChainId)) return;
+
+    const phantom = getPhantomProvider();
+    if (!phantom || !phantom.publicKey) {
+      setError("Phantom wallet not connected");
+      return;
+    }
+
+    setError("");
+    setStep("fetching-route");
+
+    try {
+      const amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
+
+      // Get route with real addresses
+      const freshRoute = await getRoute({
+        fromChain: fromChainId,
+        fromToken: fromToken.address,
+        fromAmount: amountWei,
+        fromAddress: solanaAddress,
+        toChain: toChainId,
+        toToken: toToken.address,
+        toAddress: address, // EVM destination address
+        slippageConfig: { autoMode: 1 },
+        quoteOnly: false,
+      });
+
+      setRouteResponse(freshRoute);
+
+      if (!freshRoute.route.transactionRequest) {
+        throw new Error("No transaction data returned. Try again or adjust amount.");
+      }
+
+      // Get deposit address from Squid
+      setStep("approving");
+
+      const depositResult = await getDepositAddress(freshRoute.route.transactionRequest);
+
+      setDepositInfo({
+        address: depositResult.depositAddress,
+        trackingId: depositResult.chainflipStatusTrackingId,
+      });
+
+      // Create and send SOL transfer to deposit address
+      setStep("swapping");
+
+      const connection = new Connection(SOLANA_RPC, "confirmed");
+      const fromPubkey = new PublicKey(solanaAddress);
+      const toPubkey = new PublicKey(depositResult.depositAddress);
+      const lamports = parseInt(depositResult.amount);
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports,
+        })
+      );
+
+      // Get latest blockhash
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+      transaction.feePayer = fromPubkey;
+
+      // Sign and send via Phantom
+      const { signature } = await phantom.signAndSendTransaction(transaction, {
+        skipPreflight: false,
+      });
+
+      console.log("SOL transfer signature:", signature);
+
+      // Track using chainflipStatusTrackingId
+      const bridgeType = getChainflipBridgeType(toChainId);
+
+      setActiveTx({
+        hash: depositResult.chainflipStatusTrackingId,
+        fromChainId,
+        toChainId,
+        requestId: freshRoute.requestId,
+        quoteId: freshRoute.route.quoteId || "",
+        bridgeType,
+      });
+      setStep("tracking");
+    } catch (err: unknown) {
+      console.error("Solana swap error:", err);
+      const message =
+        err instanceof Error
+          ? err.message.includes("User rejected")
+            ? "Transaction rejected by user"
+            : err.message
+          : "Swap failed";
+      setError(message);
+      setStep("idle");
+    }
+  }, [solanaAddress, address, fromToken, toToken, amount, fromChainId, toChainId]);
 
   const handleTxComplete = useCallback(() => {
     setStep("idle");
@@ -580,7 +757,158 @@ export function SwapCard() {
 
         {/* Action Buttons */}
         <div className="mt-5">
-          {!isConnected ? (
+          {step === "tracking" && activeTx ? (
+            <TransactionStatus
+              txHash={activeTx.hash}
+              fromChainId={activeTx.fromChainId}
+              toChainId={activeTx.toChainId}
+              requestId={activeTx.requestId}
+              quoteId={activeTx.quoteId}
+              bridgeType={activeTx.bridgeType}
+              onComplete={handleTxComplete}
+              onDismiss={handleTxDismiss}
+            />
+          ) : isSolanaSource ? (
+            /* Solana source chain buttons */
+            !solanaAddress ? (
+              <button
+                onClick={connectPhantom}
+                disabled={solanaConnecting}
+                className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-500 to-violet-600 text-white hover:shadow-xl hover:shadow-purple-500/25 hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
+                <span className="relative flex items-center justify-center gap-2">
+                  {solanaConnecting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" viewBox="0 0 128 128" fill="currentColor">
+                        <path d="M108.53 68.58L93.83 83.27a3.59 3.59 0 01-2.54 1.05H21.62a1.8 1.8 0 01-1.27-3.07l14.7-14.69a3.59 3.59 0 012.54-1.05h69.67a1.8 1.8 0 011.27 3.07zm-14.7-26.44a3.59 3.59 0 00-2.54-1.05H21.62a1.8 1.8 0 00-1.27 3.07l14.7 14.69a3.59 3.59 0 002.54 1.05h69.67a1.8 1.8 0 001.27-3.07zm-71.45-1.37h69.67a1.8 1.8 0 001.27-3.07L78.63 23.01a3.59 3.59 0 00-2.54-1.05H6.42a1.8 1.8 0 00-1.27 3.07l14.69 14.69a3.59 3.59 0 002.54 1.05z" />
+                      </svg>
+                      Connect Phantom Wallet
+                    </>
+                  )}
+                </span>
+              </button>
+            ) : !isConnected ? (
+              <div className="space-y-2">
+                <div className="px-3 py-2 bg-purple-500/[0.06] border border-purple-500/15 rounded-xl flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                  <span className="text-xs text-purple-300 font-medium">
+                    Phantom: {solanaAddress.slice(0, 4)}...{solanaAddress.slice(-4)}
+                  </span>
+                </div>
+                <button
+                  disabled
+                  className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-500 to-purple-600 text-white cursor-default shadow-lg shadow-violet-500/20 relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
+                  <span className="relative flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    Connect EVM Wallet for Destination
+                  </span>
+                </button>
+              </div>
+            ) : !isValidInput ? (
+              <div className="space-y-2">
+                <div className="px-3 py-2 bg-purple-500/[0.06] border border-purple-500/15 rounded-xl flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                  <span className="text-xs text-purple-300 font-medium">
+                    Phantom: {solanaAddress.slice(0, 4)}...{solanaAddress.slice(-4)}
+                  </span>
+                  <span className="text-[10px] text-gray-600 ml-auto">→</span>
+                  <span className="text-xs text-violet-300 font-medium">
+                    EVM: {address?.slice(0, 4)}...{address?.slice(-4)}
+                  </span>
+                </div>
+                <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.06] text-gray-600 cursor-not-allowed">
+                  Enter an amount
+                </button>
+              </div>
+            ) : quoteLoading ? (
+              <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-violet-500/15 border border-violet-500/20 text-violet-300 cursor-wait">
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Finding best route...
+                </span>
+              </button>
+            ) : !route ? (
+              <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.06] text-gray-600 cursor-not-allowed">
+                {error ? "No route available" : "Enter an amount"}
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <div className="px-3 py-2 bg-purple-500/[0.06] border border-purple-500/15 rounded-xl flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                  <span className="text-xs text-purple-300 font-medium">
+                    Phantom: {solanaAddress.slice(0, 4)}...{solanaAddress.slice(-4)}
+                  </span>
+                  <span className="text-[10px] text-gray-600 ml-auto">→</span>
+                  <span className="text-xs text-violet-300 font-medium">
+                    EVM: {address?.slice(0, 4)}...{address?.slice(-4)}
+                  </span>
+                </div>
+                <button
+                  onClick={handleSolanaSwap}
+                  disabled={step !== "idle"}
+                  className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 relative overflow-hidden group ${
+                    step !== "idle"
+                      ? "bg-violet-500/30 text-white cursor-wait"
+                      : "bg-gradient-to-r from-purple-500 to-violet-600 text-white hover:shadow-xl hover:shadow-purple-500/25 hover:scale-[1.01] active:scale-[0.99]"
+                  }`}
+                >
+                  {step === "idle" && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 -translate-x-full group-hover:translate-x-full transition-all duration-700" />
+                  )}
+                  <span className="relative">
+                    {step === "fetching-route" ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Finding route...
+                      </span>
+                    ) : step === "approving" ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Getting deposit address...
+                      </span>
+                    ) : step === "swapping" ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Confirm in Phantom...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        Bridge {fromToken?.symbol} → {toToken?.symbol}
+                        <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </div>
+            )
+          ) : !isConnected ? (
             <button
               disabled
               className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-500 to-purple-600 text-white cursor-default shadow-lg shadow-violet-500/20 relative overflow-hidden"
@@ -593,24 +921,6 @@ export function SwapCard() {
                 Connect Wallet to Swap
               </span>
             </button>
-          ) : isSolanaSource ? (
-            <button
-              disabled
-              className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.08] text-gray-500 cursor-not-allowed"
-            >
-              Solana → EVM bridging coming soon
-            </button>
-          ) : step === "tracking" && activeTx ? (
-            <TransactionStatus
-              txHash={activeTx.hash}
-              fromChainId={activeTx.fromChainId}
-              toChainId={activeTx.toChainId}
-              requestId={activeTx.requestId}
-              quoteId={activeTx.quoteId}
-              bridgeType={activeTx.bridgeType}
-              onComplete={handleTxComplete}
-              onDismiss={handleTxDismiss}
-            />
           ) : needsChainSwitch ? (
             <button
               onClick={async () => {
