@@ -338,23 +338,35 @@ export function SwapCard() {
     isConnected && isEvmChain(fromChainId) && walletChainId !== parseInt(fromChainId);
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-5 shadow-2xl shadow-black/30">
+    <div className="w-full max-w-[440px] mx-auto">
+      {/* Outer glow effect */}
+      <div className="relative group">
+        <div className="absolute -inset-[1px] bg-gradient-to-b from-violet-500/20 via-purple-500/10 to-transparent rounded-[22px] opacity-60" />
+        <div className="absolute -inset-[1px] bg-gradient-to-b from-white/[0.08] to-transparent rounded-[22px]" />
+        
+        <div className="relative bg-[#0e0e18]/90 backdrop-blur-2xl rounded-[22px] p-6 shadow-2xl shadow-black/40">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white italic">Swap</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Slippage:</span>
-            <div className="flex gap-1">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/10 flex items-center justify-center">
+              <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-white">Swap</h2>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray-500 mr-1 uppercase tracking-wider">Slippage</span>
+            <div className="flex gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded-lg p-0.5">
               {[0.5, 1, 3].map((s) => (
                 <button
                   key={s}
                   onClick={() => setSlippage(s)}
-                  className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 ${
                     slippage === s
-                      ? "bg-violet-500/20 text-violet-400 border border-violet-500/30"
-                      : "bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600"
+                      ? "bg-violet-500/20 text-violet-300 shadow-sm shadow-violet-500/10"
+                      : "text-gray-500 hover:text-gray-300"
                   }`}
                 >
                   {s}%
@@ -365,13 +377,13 @@ export function SwapCard() {
         </div>
 
         {/* From Section */}
-        <div className="bg-gray-800/30 rounded-xl p-4 border border-gray-700/30">
+        <div className="relative bg-white/[0.02] rounded-2xl p-4 border border-white/[0.05] hover:border-white/[0.08] transition-colors">
           <div className="flex gap-3 mb-3">
             <div className="flex-1">
               <ChainSelector
                 selectedChainId={fromChainId}
                 onSelect={handleFromChainSelect}
-                label="From Chain"
+                label="From"
                 excludeChainId={toChainId}
               />
             </div>
@@ -384,8 +396,8 @@ export function SwapCard() {
               />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">
+          <div className="relative">
+            <label className="block text-[10px] text-gray-500 mb-1.5 font-semibold uppercase tracking-widest">
               Amount
             </label>
             <input
@@ -396,41 +408,45 @@ export function SwapCard() {
                 if (val === "" || /^\d*\.?\d*$/.test(val)) setAmount(val);
               }}
               placeholder="0.0"
-              className="w-full px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-white text-lg font-medium placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-white text-xl font-semibold placeholder-gray-700 focus:outline-none focus:border-violet-500/30 focus:bg-white/[0.04] transition-all duration-200"
             />
             {fromAmountUSD !== undefined && (
-              <div className="text-xs text-gray-500 mt-1 pl-1">
-                ${fromAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="absolute right-4 bottom-3.5 text-xs text-gray-500 font-medium">
+                ≈ ${fromAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             )}
           </div>
         </div>
 
         {/* Swap Direction Button */}
-        <div className="flex justify-center -my-2 relative z-10">
+        <div className="flex justify-center -my-3 relative z-10">
           <button
             onClick={handleSwapDirection}
-            className="w-9 h-9 rounded-full bg-gray-800 border-2 border-gray-700 hover:border-violet-500/50 flex items-center justify-center transition-all group hover:scale-105"
+            className="relative group/swap"
           >
-            <svg
-              className="w-5 h-5 text-gray-400 group-hover:text-violet-400 transition-colors"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
+            <div className="absolute inset-0 bg-violet-500/20 rounded-full blur-md opacity-0 group-hover/swap:opacity-100 transition-opacity" />
+            <div className="relative w-10 h-10 rounded-full bg-[#0e0e18] border-[3px] border-[#1a1a2e] flex items-center justify-center transition-all duration-300 group-hover/swap:border-violet-500/30 group-hover/swap:scale-110 group-active/swap:scale-95">
+              <svg
+                className="w-4 h-4 text-gray-400 group-hover/swap:text-violet-400 transition-all duration-300 group-hover/swap:rotate-180"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </div>
           </button>
         </div>
 
         {/* To Section */}
-        <div className="bg-gray-800/30 rounded-xl p-4 border border-gray-700/30">
+        <div className="relative bg-white/[0.02] rounded-2xl p-4 border border-white/[0.05] hover:border-white/[0.08] transition-colors">
           <div className="flex gap-3 mb-3">
             <div className="flex-1">
               <ChainSelector
                 selectedChainId={toChainId}
                 onSelect={handleToChainSelect}
-                label="To Chain"
+                label="To"
                 excludeChainId={fromChainId}
               />
             </div>
@@ -445,91 +461,142 @@ export function SwapCard() {
           </div>
 
           {/* Estimated output */}
-          <div className="bg-gray-800/60 rounded-xl px-3 py-2.5 border border-gray-700/30">
-            <div className="text-[10px] text-gray-400 mb-0.5 font-semibold uppercase tracking-wider">
+          <div className="relative bg-white/[0.03] rounded-xl px-4 py-3 border border-white/[0.06]">
+            <div className="text-[10px] text-gray-500 mb-1 font-semibold uppercase tracking-widest">
               You receive (estimated)
             </div>
             {quoteLoading ? (
-              <div className="space-y-1.5">
-                <div className="h-7 w-40 bg-gray-700/60 rounded-lg animate-pulse" />
-                <div className="h-3 w-28 bg-gray-700/40 rounded animate-pulse" />
+              <div className="space-y-2">
+                <div className="h-7 w-36 bg-gradient-to-r from-white/[0.04] via-white/[0.08] to-white/[0.04] rounded-lg animate-pulse" />
+                <div className="h-3.5 w-20 bg-white/[0.04] rounded animate-pulse" />
               </div>
             ) : estimatedOutput && toToken ? (
               <>
-                <div className="text-xl font-bold text-violet-400">
+                <div className="text-2xl font-bold bg-gradient-to-r from-violet-300 to-purple-300 bg-clip-text text-transparent">
                   {estimatedOutput}{" "}
-                  <span className="text-base text-violet-400/70">{toToken.symbol}</span>
+                  <span className="text-base font-semibold text-violet-400/60">{toToken.symbol}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-0.5">
                   {toAmountUSD !== undefined && (
-                    <span className="text-xs text-gray-400">
-                      ${toAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span className="text-xs text-gray-500 font-medium">
+                      ≈ ${toAmountUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  )}
+                  {fromAmountUSD !== undefined && toAmountUSD !== undefined && fromAmountUSD > 0 && (
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                      toAmountUSD >= fromAmountUSD * 0.99
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-amber-500/10 text-amber-400"
+                    }`}>
+                      {toAmountUSD >= fromAmountUSD * 0.99 ? "✓" : "↓"} {((toAmountUSD / fromAmountUSD) * 100 - 100).toFixed(2)}%
                     </span>
                   )}
                 </div>
               </>
             ) : (
-              <div className="text-lg text-gray-600 font-medium">0.0</div>
+              <div className="text-xl text-gray-700 font-semibold">0.0</div>
             )}
           </div>
         </div>
 
         {/* Route Details */}
         {route && estimate && (
-          <div className="mt-3 p-3 bg-gray-800/20 rounded-xl border border-gray-700/20 space-y-1.5">
-            {estimatedDuration !== undefined && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Est. Time</span>
-                <span className="text-gray-300">
-                  {estimatedDuration < 60 ? `~${estimatedDuration}s` : `~${Math.ceil(estimatedDuration / 60)} min`}
-                </span>
+          <div className="mt-4 space-y-0">
+            <div className="relative bg-white/[0.02] rounded-2xl border border-white/[0.05] overflow-hidden">
+              {/* Route header */}
+              <div className="px-4 py-2.5 border-b border-white/[0.04] flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-violet-400 animate-pulse" />
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Route Details</span>
               </div>
-            )}
-            {estimate.exchangeRate && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Exchange Rate</span>
-                <span className="text-gray-300">
-                  1 {fromToken?.symbol} ≈ {parseFloat(estimate.exchangeRate).toFixed(4)} {toToken?.symbol}
-                </span>
+              <div className="divide-y divide-white/[0.03]">
+                {estimatedDuration !== undefined && (
+                  <div className="flex justify-between items-center px-4 py-2.5">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Est. Time
+                    </span>
+                    <span className="text-xs text-white/70 font-medium">
+                      {estimatedDuration < 60 ? `~${estimatedDuration}s` : `~${Math.ceil(estimatedDuration / 60)} min`}
+                    </span>
+                  </div>
+                )}
+                {estimate.exchangeRate && (
+                  <div className="flex justify-between items-center px-4 py-2.5">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Rate
+                    </span>
+                    <span className="text-xs text-white/70 font-medium">
+                      1 {fromToken?.symbol} ≈ {parseFloat(estimate.exchangeRate).toFixed(4)} {toToken?.symbol}
+                    </span>
+                  </div>
+                )}
+                {estimate.aggregatePriceImpact && parseFloat(estimate.aggregatePriceImpact) > 0 && (
+                  <div className="flex justify-between items-center px-4 py-2.5">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                      </svg>
+                      Impact
+                    </span>
+                    <span className={`text-xs font-medium ${
+                      parseFloat(estimate.aggregatePriceImpact) > 3 ? "text-red-400" : "text-white/70"
+                    }`}>
+                      {parseFloat(estimate.aggregatePriceImpact).toFixed(2)}%
+                    </span>
+                  </div>
+                )}
+                {estimate.feeCosts && estimate.feeCosts.length > 0 && (
+                  <div className="flex justify-between items-center px-4 py-2.5">
+                    <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      Fees
+                    </span>
+                    <span className="text-xs text-white/70 font-medium">
+                      ${estimate.feeCosts.reduce((sum, f) => sum + parseFloat(f.amountUSD || "0"), 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-            {estimate.aggregatePriceImpact && parseFloat(estimate.aggregatePriceImpact) > 0 && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Price Impact</span>
-                <span className="text-gray-300">{parseFloat(estimate.aggregatePriceImpact).toFixed(2)}%</span>
-              </div>
-            )}
-            {estimate.feeCosts && estimate.feeCosts.length > 0 && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Fees</span>
-                <span className="text-gray-300">
-                  ${estimate.feeCosts.reduce((sum, f) => sum + parseFloat(f.amountUSD || "0"), 0).toFixed(2)}
-                </span>
-              </div>
-            )}
+            </div>
           </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <p className="text-sm text-red-400">{error}</p>
+          <div className="mt-4 p-3.5 bg-red-500/[0.06] border border-red-500/15 rounded-xl flex items-start gap-2.5">
+            <svg className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <p className="text-sm text-red-400/90 leading-snug">{error}</p>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="mt-4">
+        <div className="mt-5">
           {!isConnected ? (
             <button
               disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-500 to-purple-600 text-white cursor-default shadow-lg shadow-violet-500/25"
+              className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-500 to-purple-600 text-white cursor-default shadow-lg shadow-violet-500/20 relative overflow-hidden"
             >
-              Connect Wallet to Swap
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
+              <span className="relative flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Connect Wallet to Swap
+              </span>
             </button>
           ) : isSolanaSource ? (
             <button
               disabled
-              className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-400 cursor-not-allowed"
+              className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.08] text-gray-500 cursor-not-allowed"
             >
               Solana → EVM bridging coming soon
             </button>
@@ -553,72 +620,86 @@ export function SwapCard() {
                   setError("Failed to switch chain");
                 }
               }}
-              className="w-full py-3 px-4 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-xl font-semibold text-sm hover:bg-yellow-500/30 transition-colors"
+              className="w-full py-3.5 px-4 bg-amber-500/[0.08] text-amber-400 border border-amber-500/20 rounded-xl font-semibold text-sm hover:bg-amber-500/[0.12] transition-all duration-200 flex items-center justify-center gap-2"
             >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
               Switch to {SUPPORTED_CHAINS.find((c) => c.chainId === fromChainId)?.name}
             </button>
           ) : !isValidInput ? (
-            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed">
+            <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.06] text-gray-600 cursor-not-allowed">
               Enter an amount
             </button>
           ) : quoteLoading ? (
-            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-violet-500/50 text-white cursor-wait">
+            <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-violet-500/15 border border-violet-500/20 text-violet-300 cursor-wait">
               <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Getting best price...
+                Finding best route...
               </span>
             </button>
           ) : !route ? (
-            <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed">
+            <button disabled className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-white/[0.04] border border-white/[0.06] text-gray-600 cursor-not-allowed">
               {error ? "No route available" : "Enter an amount"}
             </button>
           ) : (
             <button
               onClick={handleSwap}
               disabled={step !== "idle"}
-              className={`w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 ${
+              className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 relative overflow-hidden group ${
                 step !== "idle"
-                  ? "bg-violet-500/50 text-white cursor-wait"
-                  : "bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700 shadow-lg shadow-violet-500/25"
+                  ? "bg-violet-500/30 text-white cursor-wait"
+                  : "bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:shadow-xl hover:shadow-violet-500/25 hover:scale-[1.01] active:scale-[0.99]"
               }`}
             >
-              {step === "fetching-route" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Finding best route...
-                </span>
-              ) : step === "approving" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Confirm in wallet...
-                </span>
-              ) : step === "swapping" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Executing swap...
-                </span>
-              ) : (
-                `Swap ${fromToken?.symbol} → ${toToken?.symbol}`
+              {step === "idle" && (
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 -translate-x-full group-hover:translate-x-full transition-all duration-700" />
               )}
+              <span className="relative">
+                {step === "fetching-route" ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Finding best route...
+                  </span>
+                ) : step === "approving" ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Confirm in wallet...
+                  </span>
+                ) : step === "swapping" ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Executing swap...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    Swap {fromToken?.symbol} → {toToken?.symbol}
+                    <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </span>
+                )}
+              </span>
             </button>
           )}
         </div>
 
         {/* Powered by */}
-        <div className="mt-4 text-center">
-          <span className="text-xs text-gray-600">
+        <div className="mt-5 flex items-center justify-center gap-1.5">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/[0.04]" />
+          <span className="text-[10px] text-gray-600 uppercase tracking-widest font-medium">
             Powered by{" "}
             <a
               href="https://squidrouter.com"
@@ -629,6 +710,8 @@ export function SwapCard() {
               Squid Router
             </a>
           </span>
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/[0.04]" />
+        </div>
         </div>
       </div>
     </div>

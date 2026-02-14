@@ -32,9 +32,20 @@ export function TransactionStatus({
   const [status, setStatus] = useState("ongoing");
   const [axelarUrl, setAxelarUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [elapsed, setElapsed] = useState(0);
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
+
+  // Timer
+  useEffect(() => {
+    const isTerminal =
+      SQUID_COMPLETED_STATES.includes(status) || SQUID_FAILED_STATES.includes(status);
+    if (isTerminal) return;
+
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, [status]);
 
   // Poll transaction status via Squid
   const checkStatus = useCallback(async () => {
@@ -88,74 +99,140 @@ export function TransactionStatus({
     return `https://axelarscan.io/gmp/${txHash}`;
   };
 
+  const formatTime = (s: number) => {
+    const min = Math.floor(s / 60);
+    const sec = s % 60;
+    return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+  };
+
+  // Progress steps
+  const steps = [
+    { label: "Transaction Sent", done: true },
+    { label: "Processing on " + (fromChain?.name || "source"), done: status !== "ongoing" || elapsed > 10 },
+    { label: "Bridging to " + (toChain?.name || "destination"), done: isComplete || status === "partial_success" || status === "needs_gas" },
+    { label: "Complete", done: isComplete },
+  ];
+
   return (
     <div className="space-y-3">
-      <div
-        className={`p-4 rounded-xl border ${
-          isComplete
-            ? "bg-violet-500/10 border-violet-500/30"
-            : isFailed
-            ? "bg-red-500/10 border-red-500/30"
-            : "bg-blue-500/10 border-blue-500/30"
-        }`}
-      >
-        <div className="flex items-center gap-3 mb-2">
+      <div className={`rounded-2xl border overflow-hidden ${
+        isComplete
+          ? "bg-emerald-500/[0.04] border-emerald-500/20"
+          : isFailed
+          ? "bg-red-500/[0.04] border-red-500/20"
+          : "bg-violet-500/[0.04] border-violet-500/15"
+      }`}>
+        {/* Header */}
+        <div className={`px-4 py-3 flex items-center gap-3 border-b ${
+          isComplete ? "border-emerald-500/10" : isFailed ? "border-red-500/10" : "border-violet-500/10"
+        }`}>
           {!isComplete && !isFailed && (
-            <svg
-              className="animate-spin h-5 w-5 text-blue-400"
-              viewBox="0 0 24 24"
-            >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <div className="relative w-8 h-8">
+              <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/[0.06]" />
+                <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-400" strokeDasharray="88" strokeDashoffset={88 - (elapsed % 60) * 1.47} strokeLinecap="round" />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+              </div>
+            </div>
           )}
-          {isComplete && <span className="text-2xl">✅</span>}
-          {isFailed && <span className="text-2xl">❌</span>}
+          {isComplete && (
+            <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center">
+              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          )}
+          {isFailed && (
+            <div className="w-8 h-8 rounded-full bg-red-500/15 flex items-center justify-center">
+              <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+          )}
 
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-white">
-              {isComplete
-                ? "Bridge Complete!"
-                : isFailed
-                ? "Bridge Failed"
-                : "Bridging in Progress..."}
+              {isComplete ? "Bridge Complete!" : isFailed ? "Bridge Failed" : "Bridging in Progress"}
             </p>
-            <p className="text-xs text-gray-400">
+            <p className="text-[11px] text-gray-500">
               {fromChain?.name} → {toChain?.name}
               {!isComplete && !isFailed && (
-                <span className="ml-2 text-gray-500">({status})</span>
+                <span className="ml-2 text-gray-600">• {formatTime(elapsed)}</span>
               )}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Tx:</span>
-            <a
-              href={getExplorerUrl(fromChainId, txHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-400 hover:text-blue-300 font-mono truncate"
-            >
-              {txHash.slice(0, 10)}...{txHash.slice(-8)}
-            </a>
+        {/* Progress Steps */}
+        {!isFailed && (
+          <div className="px-4 py-3 space-y-0">
+            {steps.map((s, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="flex flex-col items-center">
+                  <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+                    s.done
+                      ? "border-violet-400 bg-violet-400/20"
+                      : i === steps.findIndex((x) => !x.done)
+                      ? "border-violet-400/50 bg-transparent animate-pulse"
+                      : "border-white/10 bg-transparent"
+                  }`}>
+                    {s.done && (
+                      <svg className="w-2 h-2 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className={`w-px h-5 transition-all duration-500 ${
+                      s.done ? "bg-violet-400/30" : "bg-white/[0.06]"
+                    }`} />
+                  )}
+                </div>
+                <span className={`text-xs font-medium -mt-0.5 ${
+                  s.done ? "text-white/70" : "text-gray-600"
+                }`}>
+                  {s.label}
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Track:</span>
-            <a
-              href={getSquidExplorerUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-violet-400 hover:text-violet-300"
-            >
-              View on Axelarscan ↗
-            </a>
-          </div>
+        )}
+
+        {/* Links */}
+        <div className="px-4 py-3 border-t border-white/[0.04] flex items-center gap-4">
+          <a
+            href={getExplorerUrl(fromChainId, txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-gray-500 hover:text-violet-400 transition-colors flex items-center gap-1 font-medium"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Source Tx
+          </a>
+          <a
+            href={getSquidExplorerUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-gray-500 hover:text-violet-400 transition-colors flex items-center gap-1 font-medium"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Axelarscan
+          </a>
+          <span className="text-[10px] text-gray-700 font-mono ml-auto">
+            {txHash.slice(0, 6)}…{txHash.slice(-4)}
+          </span>
         </div>
 
         {error && (
-          <p className="text-xs text-red-400 mt-2">{error}</p>
+          <div className="px-4 pb-3">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
         )}
       </div>
 
@@ -163,14 +240,14 @@ export function TransactionStatus({
         {isComplete && (
           <button
             onClick={onComplete}
-            className="flex-1 py-2.5 px-4 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-semibold text-sm hover:from-violet-600 hover:to-purple-700 transition-colors"
+            className="flex-1 py-2.5 px-4 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-violet-500/20 transition-all duration-200"
           >
             New Swap
           </button>
         )}
         <button
           onClick={onDismiss}
-          className="flex-1 py-2.5 px-4 bg-gray-700 text-gray-300 rounded-xl font-semibold text-sm hover:bg-gray-600 transition-colors"
+          className="flex-1 py-2.5 px-4 bg-white/[0.04] border border-white/[0.08] text-gray-400 rounded-xl font-semibold text-sm hover:bg-white/[0.06] transition-colors"
         >
           {isComplete ? "Close" : "Dismiss"}
         </button>
