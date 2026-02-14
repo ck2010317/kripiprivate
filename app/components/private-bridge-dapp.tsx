@@ -7,8 +7,8 @@ import {
   Connection,
   PublicKey,
   Transaction,
+  VersionedTransaction,
   SystemProgram,
-  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { ChainSelector } from "./ChainSelector";
 import { TokenSelector } from "./TokenSelector";
@@ -41,9 +41,12 @@ interface PhantomProvider {
   connect(): Promise<{ publicKey: { toBase58(): string } }>;
   disconnect(): Promise<void>;
   signAndSendTransaction(
-    transaction: Transaction,
+    transaction: Transaction | VersionedTransaction,
     options?: { skipPreflight?: boolean }
   ): Promise<{ signature: string }>;
+  signTransaction(
+    transaction: Transaction | VersionedTransaction
+  ): Promise<Transaction | VersionedTransaction>;
   isConnected: boolean;
 }
 
@@ -54,7 +57,7 @@ declare global {
   }
 }
 
-const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC = "https://mainnet.helius-rpc.com/?api-key=7d359733-8771-4d20-af8c-54f756c96bb1";
 
 type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
@@ -386,7 +389,10 @@ export function SwapCard() {
     }
   }, [walletClient, address, fromToken, toToken, amount, fromChainId, toChainId, walletChainId, switchChainAsync, slippage]);
 
-  // Execute Solana → EVM swap via deposit address flow
+  // Execute Solana → EVM swap
+  // Handles two Squid response types:
+  // 1. ON_CHAIN_EXECUTION: Squid returns a serialized Solana tx to sign & send directly
+  // 2. CHAINFLIP_DEPOSIT_ADDRESS: Need to call /deposit-address then do a simple SOL transfer
   const handleSolanaSwap = useCallback(async () => {
     if (!solanaAddress || !fromToken || !toToken || !amount || !address) return;
     if (!isSolanaChain(fromChainId)) return;
@@ -422,59 +428,105 @@ export function SwapCard() {
         throw new Error("No transaction data returned. Try again or adjust amount.");
       }
 
-      console.log("Solana route transactionRequest:", JSON.stringify(freshRoute.route.transactionRequest, null, 2));
+      const txRequest = freshRoute.route.transactionRequest;
+      const txType = txRequest.type as string;
+      console.log("Solana route transactionRequest type:", txType);
 
-      // Get deposit address from Squid
-      setStep("approving");
-
-      const depositResult = await getDepositAddress(freshRoute.route.transactionRequest);
-
-      setDepositInfo({
-        address: depositResult.depositAddress,
-        trackingId: depositResult.chainflipStatusTrackingId,
-      });
-
-      // Create and send SOL transfer to deposit address
       setStep("swapping");
 
-      const connection = new Connection(SOLANA_RPC, "confirmed");
-      const fromPubkey = new PublicKey(solanaAddress);
-      const toPubkey = new PublicKey(depositResult.depositAddress);
-      const lamports = parseInt(depositResult.amount);
+      if (txType === "ON_CHAIN_EXECUTION") {
+        // Direct Solana transaction — deserialize, sign, send
+        const txData = txRequest.data as string;
+        const txBytes = Uint8Array.from(atob(txData), (c) => c.charCodeAt(0));
 
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey,
-          lamports,
-        })
-      );
+        let signature: string;
 
-      // Get latest blockhash
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.lastValidBlockHeight = lastValidBlockHeight;
-      transaction.feePayer = fromPubkey;
+        // Try as VersionedTransaction first, fall back to legacy Transaction
+        try {
+          const versionedTx = VersionedTransaction.deserialize(txBytes);
+          console.log("Deserialized as VersionedTransaction");
 
-      // Sign and send via Phantom
-      const { signature } = await phantom.signAndSendTransaction(transaction, {
-        skipPreflight: false,
-      });
+          // Phantom signs and sends VersionedTransaction
+          const result = await phantom.signAndSendTransaction(versionedTx, {
+            skipPreflight: false,
+          });
+          signature = result.signature;
+        } catch (versionedErr) {
+          console.log("VersionedTransaction failed, trying legacy Transaction:", versionedErr);
+          const legacyTx = Transaction.from(txBytes);
 
-      console.log("SOL transfer signature:", signature);
+          const result = await phantom.signAndSendTransaction(legacyTx, {
+            skipPreflight: false,
+          });
+          signature = result.signature;
+        }
 
-      // Track using chainflipStatusTrackingId
-      const bridgeType = getChainflipBridgeType(toChainId);
+        console.log("Solana tx signature:", signature);
 
-      setActiveTx({
-        hash: depositResult.chainflipStatusTrackingId,
-        fromChainId,
-        toChainId,
-        requestId: freshRoute.requestId,
-        quoteId: freshRoute.route.quoteId || "",
-        bridgeType,
-      });
-      setStep("tracking");
+        // Track via requestId (Squid Axelar flow, not Chainflip)
+        setActiveTx({
+          hash: signature,
+          fromChainId,
+          toChainId,
+          requestId: freshRoute.requestId,
+          quoteId: freshRoute.route.quoteId || "",
+          // No bridgeType needed for ON_CHAIN_EXECUTION
+        });
+        setStep("tracking");
+
+      } else if (txType === "CHAINFLIP_DEPOSIT_ADDRESS") {
+        // Deposit address flow — call /deposit-address, then simple SOL transfer
+        setStep("approving");
+
+        const depositResult = await getDepositAddress(txRequest);
+        console.log("Deposit address result:", depositResult);
+
+        setDepositInfo({
+          address: depositResult.depositAddress,
+          trackingId: depositResult.chainflipStatusTrackingId,
+        });
+
+        setStep("swapping");
+
+        const connection = new Connection(SOLANA_RPC, "confirmed");
+        const fromPubkey = new PublicKey(solanaAddress);
+        const toPubkey = new PublicKey(depositResult.depositAddress);
+        const lamports = parseInt(depositResult.amount);
+
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey,
+            toPubkey,
+            lamports,
+          })
+        );
+
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
+        transaction.feePayer = fromPubkey;
+
+        const { signature } = await phantom.signAndSendTransaction(transaction, {
+          skipPreflight: false,
+        });
+
+        console.log("SOL deposit transfer signature:", signature);
+
+        const bridgeType = getChainflipBridgeType(toChainId);
+
+        setActiveTx({
+          hash: depositResult.chainflipStatusTrackingId,
+          fromChainId,
+          toChainId,
+          requestId: freshRoute.requestId,
+          quoteId: freshRoute.route.quoteId || "",
+          bridgeType,
+        });
+        setStep("tracking");
+
+      } else {
+        throw new Error(`Unsupported transaction type: ${txType}`);
+      }
     } catch (err: unknown) {
       console.error("Solana swap error:", err);
       const message =
