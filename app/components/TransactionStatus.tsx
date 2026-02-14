@@ -15,6 +15,7 @@ interface TransactionStatusProps {
   requestId: string;
   quoteId: string;
   bridgeType?: string;
+  solanaSignature?: string; // Actual Solana tx signature for explorer links
   onComplete: () => void;
   onDismiss: () => void;
 }
@@ -26,6 +27,7 @@ export function TransactionStatus({
   requestId,
   quoteId,
   bridgeType,
+  solanaSignature,
   onComplete,
   onDismiss,
 }: TransactionStatusProps) {
@@ -33,9 +35,14 @@ export function TransactionStatus({
   const [axelarUrl, setAxelarUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  const [failCount, setFailCount] = useState(0);
+  const MAX_POLL_FAILURES = 60; // Stop after ~5 min of failures
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
+
+  // For explorer links: use actual Solana signature if available, otherwise txHash
+  const explorerTxHash = solanaSignature || txHash;
 
   // Timer
   useEffect(() => {
@@ -65,8 +72,9 @@ export function TransactionStatus({
       if (result.axelarTransactionUrl) {
         setAxelarUrl(result.axelarTransactionUrl);
       }
+      setFailCount(0); // Reset on success
     } catch {
-      // Don't error on polling failures, just retry
+      setFailCount((c) => c + 1);
     }
   }, [txHash, fromChainId, toChainId, requestId, quoteId, bridgeType]);
 
@@ -77,11 +85,17 @@ export function TransactionStatus({
 
     if (isTerminal) return;
 
+    // Stop polling after too many consecutive failures
+    if (failCount >= MAX_POLL_FAILURES) {
+      setError("Status tracking timed out. Your swap may still complete — check the explorer link below.");
+      return;
+    }
+
     const interval = setInterval(checkStatus, 5000);
     checkStatus(); // initial check
 
     return () => clearInterval(interval);
-  }, [status, checkStatus]);
+  }, [status, checkStatus, failCount]);
 
   const isComplete = SQUID_COMPLETED_STATES.includes(status);
   const isFailed = SQUID_FAILED_STATES.includes(status);
@@ -96,7 +110,7 @@ export function TransactionStatus({
 
   const getSquidExplorerUrl = () => {
     if (axelarUrl) return axelarUrl;
-    return `https://axelarscan.io/gmp/${txHash}`;
+    return `https://axelarscan.io/gmp/${explorerTxHash}`;
   };
 
   const formatTime = (s: number) => {
@@ -203,7 +217,7 @@ export function TransactionStatus({
         {/* Links */}
         <div className="px-4 py-3 border-t border-white/[0.04] flex items-center gap-4">
           <a
-            href={getExplorerUrl(fromChainId, txHash)}
+            href={getExplorerUrl(fromChainId, explorerTxHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] text-gray-500 hover:text-violet-400 transition-colors flex items-center gap-1 font-medium"
@@ -225,7 +239,7 @@ export function TransactionStatus({
             Axelarscan
           </a>
           <span className="text-[10px] text-gray-700 font-mono ml-auto">
-            {txHash.slice(0, 6)}…{txHash.slice(-4)}
+            {explorerTxHash.slice(0, 6)}…{explorerTxHash.slice(-4)}
           </span>
         </div>
 

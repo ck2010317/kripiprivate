@@ -68,6 +68,7 @@ interface ActiveTx {
   requestId: string;
   quoteId: string;
   bridgeType?: string;
+  solanaSignature?: string; // Actual Solana tx signature for explorer links
 }
 
 function getPhantomProvider(): PhantomProvider | null {
@@ -462,15 +463,20 @@ export function SwapCard() {
         }
 
         console.log("Solana tx signature:", signature);
+        console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        // Track via requestId (Squid Axelar flow, not Chainflip)
+        // For Solana ON_CHAIN_EXECUTION: use requestId as transactionId for status API
+        // The Solana tx signature doesn't work as transactionId — Squid needs requestId
+        // Also need bridgeType for Solana→EVM status tracking
+        const bridgeType = getChainflipBridgeType(toChainId);
         setActiveTx({
-          hash: signature,
+          hash: freshRoute.requestId || signature,
           fromChainId,
           toChainId,
           requestId: freshRoute.requestId,
           quoteId: freshRoute.route.quoteId || "",
-          // No bridgeType needed for ON_CHAIN_EXECUTION
+          bridgeType,
+          solanaSignature: signature, // Keep actual tx hash for explorer link
         });
         setStep("tracking");
 
@@ -820,6 +826,7 @@ export function SwapCard() {
               requestId={activeTx.requestId}
               quoteId={activeTx.quoteId}
               bridgeType={activeTx.bridgeType}
+              solanaSignature={activeTx.solanaSignature}
               onComplete={handleTxComplete}
               onDismiss={handleTxDismiss}
             />
