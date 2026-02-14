@@ -2,92 +2,67 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  getOrderStatus,
-  getOrderIdByTxHash,
-  DEBRIDGE_COMPLETED_STATES,
-  DEBRIDGE_FAILED_STATES,
-} from "@/lib/debridge";
+  getStatus,
+  SQUID_COMPLETED_STATES,
+  SQUID_FAILED_STATES,
+} from "@/lib/squid";
 import { getChainById, isSolanaChain } from "@/config/chains";
 
 interface TransactionStatusProps {
   txHash: string;
-  orderId: string;
   fromChainId: string;
   toChainId: string;
+  requestId: string;
+  quoteId: string;
+  bridgeType?: string;
   onComplete: () => void;
   onDismiss: () => void;
 }
 
 export function TransactionStatus({
   txHash,
-  orderId: initialOrderId,
   fromChainId,
   toChainId,
+  requestId,
+  quoteId,
+  bridgeType,
   onComplete,
   onDismiss,
 }: TransactionStatusProps) {
-  const [status, setStatus] = useState("Pending");
-  const [resolvedOrderId, setResolvedOrderId] = useState(initialOrderId);
+  const [status, setStatus] = useState("ongoing");
+  const [axelarUrl, setAxelarUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
 
-  // Resolve order ID from tx hash if not provided
-  useEffect(() => {
-    if (resolvedOrderId) return;
-
-    let attempts = 0;
-    const maxAttempts = 20;
-
-    const resolveOrderId = async () => {
-      try {
-        const result = await getOrderIdByTxHash(txHash);
-        if (result.orderIds && result.orderIds.length > 0) {
-          setResolvedOrderId(result.orderIds[0]);
-          return true;
-        }
-      } catch {
-        // Silently retry
-      }
-      return false;
-    };
-
-    const interval = setInterval(async () => {
-      attempts++;
-      const found = await resolveOrderId();
-      if (found || attempts >= maxAttempts) {
-        clearInterval(interval);
-        if (!found && attempts >= maxAttempts) {
-          setError("Could not resolve order ID. Check explorer for status.");
-        }
-      }
-    }, 5000);
-
-    resolveOrderId();
-
-    return () => clearInterval(interval);
-  }, [txHash, resolvedOrderId]);
-
-  // Poll order status
+  // Poll transaction status via Squid
   const checkStatus = useCallback(async () => {
-    if (!resolvedOrderId) return;
     try {
-      const result = await getOrderStatus(resolvedOrderId);
-      if (result.status) {
-        setStatus(result.status);
+      const result = await getStatus({
+        transactionId: txHash,
+        fromChainId,
+        toChainId,
+        requestId,
+        quoteId,
+        bridgeType,
+      });
+
+      if (result.squidTransactionStatus) {
+        setStatus(result.squidTransactionStatus);
+      }
+      if (result.axelarTransactionUrl) {
+        setAxelarUrl(result.axelarTransactionUrl);
       }
     } catch {
       // Don't error on polling failures, just retry
     }
-  }, [resolvedOrderId]);
+  }, [txHash, fromChainId, toChainId, requestId, quoteId, bridgeType]);
 
   useEffect(() => {
-    if (!resolvedOrderId) return;
-
     const isTerminal =
-      DEBRIDGE_COMPLETED_STATES.includes(status) ||
-      DEBRIDGE_FAILED_STATES.includes(status);
+      SQUID_COMPLETED_STATES.includes(status) ||
+      SQUID_FAILED_STATES.includes(status);
 
     if (isTerminal) return;
 
@@ -95,10 +70,10 @@ export function TransactionStatus({
     checkStatus(); // initial check
 
     return () => clearInterval(interval);
-  }, [status, resolvedOrderId, checkStatus]);
+  }, [status, checkStatus]);
 
-  const isComplete = DEBRIDGE_COMPLETED_STATES.includes(status);
-  const isFailed = DEBRIDGE_FAILED_STATES.includes(status);
+  const isComplete = SQUID_COMPLETED_STATES.includes(status);
+  const isFailed = SQUID_FAILED_STATES.includes(status);
 
   const getExplorerUrl = (chainId: string, hash: string) => {
     if (isSolanaChain(chainId)) {
@@ -108,11 +83,9 @@ export function TransactionStatus({
     return `${chain?.explorerUrl}/tx/${hash}`;
   };
 
-  const getDebridgeExplorerUrl = () => {
-    if (resolvedOrderId) {
-      return `https://app.debridge.finance/order?orderId=${resolvedOrderId}`;
-    }
-    return null;
+  const getSquidExplorerUrl = () => {
+    if (axelarUrl) return axelarUrl;
+    return `https://axelarscan.io/gmp/${txHash}`;
   };
 
   return (
@@ -168,19 +141,17 @@ export function TransactionStatus({
               {txHash.slice(0, 10)}...{txHash.slice(-8)}
             </a>
           </div>
-          {getDebridgeExplorerUrl() && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">Track:</span>
-              <a
-                href={getDebridgeExplorerUrl()!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-violet-400 hover:text-violet-300"
-              >
-                View on deBridge Explorer ↗
-              </a>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Track:</span>
+            <a
+              href={getSquidExplorerUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-violet-400 hover:text-violet-300"
+            >
+              View on Axelarscan ↗
+            </a>
+          </div>
         </div>
 
         {error && (

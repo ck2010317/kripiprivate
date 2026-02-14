@@ -1,12 +1,12 @@
-// Chain and token configuration for PrivateBridge (deBridge DLN)
-// deBridge uses 0x000...0 for EVM native tokens, and Solana chain ID 7565164
+// Chain and token configuration for PrivateBridge (Squid Router v2)
+// Squid uses 0xEeee...EEeE for all native tokens (EVM + Solana)
 
-// EVM native token address for deBridge
-export const NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
-// Solana native token address for deBridge
-export const SOLANA_NATIVE_ADDRESS = "11111111111111111111111111111111";
+// Native token address for Squid Router (EVM + Solana)
+export const NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+// Solana native token address (same as NATIVE_TOKEN_ADDRESS for Squid)
+export const SOLANA_NATIVE_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
-export const SOLANA_CHAIN_ID = "7565164";
+export const SOLANA_CHAIN_ID = "solana-mainnet-beta";
 
 export interface ChainInfo {
   chainId: string;
@@ -103,7 +103,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
   },
 ];
 
-// Tokens available per chain (deBridge-compatible addresses)
+// Tokens available per chain (Squid Router-compatible addresses)
 const CHAIN_TOKENS: Record<string, TokenInfo[]> = {
   "1": [
     { address: NATIVE_TOKEN_ADDRESS, symbol: "ETH", name: "Ethereum", decimals: 18, icon: "⟠", chainId: "1" },

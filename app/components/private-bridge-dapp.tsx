@@ -17,18 +17,24 @@ import {
   type TokenInfo,
 } from "@/config/chains";
 import {
-  getQuote,
-  type DeBridgeResponse,
+  getRoute,
+  getDepositAddress,
+  type SquidRoute,
+  type SquidRouteResponse,
   ERC20_ABI,
-} from "@/lib/debridge";
+  isChainflipChain,
+  getChainflipBridgeType,
+} from "@/lib/squid";
 
 type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
 interface ActiveTx {
   hash: string;
-  orderId: string;
   fromChainId: string;
   toChainId: string;
+  requestId: string;
+  quoteId: string;
+  bridgeType?: string;
 }
 
 export function SwapCard() {
@@ -40,12 +46,15 @@ export function SwapCard() {
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(1);
 
-  // Quote state
-  const [quote, setQuote] = useState<DeBridgeResponse | null>(null);
+  // Route state
+  const [routeResponse, setRouteResponse] = useState<SquidRouteResponse | null>(null);
   const [step, setStep] = useState<SwapStep>("idle");
   const [error, setError] = useState("");
   const [activeTx, setActiveTx] = useState<ActiveTx | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+
+  // Deposit address for Solana→EVM
+  const [depositInfo, setDepositInfo] = useState<{ address: string; trackingId: string } | null>(null);
 
   // Debounce ref
   const quoteTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,8 +96,8 @@ export function SwapCard() {
   // Placeholder address for estimation when wallet not connected
   const QUOTE_ESTIMATION_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
-  // Fetch quote from deBridge
-  const fetchQuote = useCallback(
+  // Fetch route from Squid Router
+  const fetchRoute = useCallback(
     async (
       fChainId: string,
       tChainId: string,
@@ -99,42 +108,35 @@ export function SwapCard() {
       quoteId: number
     ) => {
       try {
-        // deBridge create-tx works for estimation without wallet addresses
-        const result = await getQuote({
-          srcChainId: fChainId,
-          srcChainTokenIn: fToken.address,
-          srcChainTokenInAmount: amountWei,
-          dstChainId: tChainId,
-          dstChainTokenOut: tToken.address,
-          prependOperatingExpenses: true,
-          // Only include addresses if wallet is connected (for full tx generation)
-          ...(quoteAddress && isEvmChain(fChainId)
-            ? {
-                srcChainOrderAuthorityAddress: quoteAddress,
-                dstChainOrderAuthorityAddress: isSolanaChain(tChainId)
-                  ? undefined
-                  : quoteAddress,
-                dstChainTokenOutRecipient: isSolanaChain(tChainId)
-                  ? undefined
-                  : quoteAddress,
-              }
-            : {}),
+        const fromAddr = quoteAddress || QUOTE_ESTIMATION_ADDRESS;
+        const toAddr = quoteAddress || QUOTE_ESTIMATION_ADDRESS;
+
+        const result = await getRoute({
+          fromChain: fChainId,
+          fromToken: fToken.address,
+          fromAmount: amountWei,
+          fromAddress: fromAddr,
+          toChain: tChainId,
+          toToken: tToken.address,
+          toAddress: toAddr,
+          slippageConfig: { autoMode: 1 },
+          quoteOnly: !quoteAddress,
         });
 
         if (quoteAbortRef.current === quoteId) {
-          setQuote(result);
+          setRouteResponse(result);
           setError("");
         }
       } catch (err: unknown) {
         if (quoteAbortRef.current === quoteId) {
-          const message = err instanceof Error ? err.message : "Failed to get quote";
+          const message = err instanceof Error ? err.message : "Failed to get route";
           if (
             !message.includes("insufficient") &&
             !message.includes("too small")
           ) {
             setError(message);
           }
-          setQuote(null);
+          setRouteResponse(null);
         }
       } finally {
         if (quoteAbortRef.current === quoteId) {
@@ -151,7 +153,7 @@ export function SwapCard() {
     if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
 
     if (!fromToken || !toToken || !amount || parseFloat(amount) <= 0) {
-      setQuote(null);
+      setRouteResponse(null);
       setQuoteLoading(false);
       return;
     }
@@ -160,13 +162,13 @@ export function SwapCard() {
     try {
       amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
     } catch {
-      setQuote(null);
+      setRouteResponse(null);
       setQuoteLoading(false);
       return;
     }
 
     if (amountWei === "0") {
-      setQuote(null);
+      setRouteResponse(null);
       setQuoteLoading(false);
       return;
     }
@@ -177,13 +179,13 @@ export function SwapCard() {
     const quoteId = ++quoteAbortRef.current;
 
     quoteTimerRef.current = setTimeout(() => {
-      fetchQuote(fromChainId, toChainId, fromToken, toToken, amountWei, address || undefined, quoteId);
+      fetchRoute(fromChainId, toChainId, fromToken, toToken, amountWei, address || undefined, quoteId);
     }, 1200);
 
     return () => {
       if (quoteTimerRef.current) clearTimeout(quoteTimerRef.current);
     };
-  }, [fromChainId, toChainId, fromToken, toToken, amount, address, slippage, fetchQuote]);
+  }, [fromChainId, toChainId, fromToken, toToken, amount, address, slippage, fetchRoute]);
 
   const handleFromChainSelect = useCallback((chain: ChainInfo) => {
     setFromChainId(chain.chainId);
@@ -206,7 +208,7 @@ export function SwapCard() {
     setToToken(fromToken);
   }, [fromChainId, toChainId, fromToken, toToken]);
 
-  // Execute swap via deBridge
+  // Execute swap via Squid Router
   const handleSwap = useCallback(async () => {
     if (!walletClient || !address || !fromToken || !toToken || !amount) return;
     if (!isEvmChain(fromChainId)) {
@@ -232,43 +234,41 @@ export function SwapCard() {
       );
       const signer = provider.getSigner();
 
-      // Get fresh quote with wallet addresses for tx generation
+      // Get fresh route with wallet addresses for tx generation
       setStep("fetching-route");
 
-      // For Solana destination, user needs to provide a Solana address.
-      // For now we handle EVM→EVM and EVM→Solana (Solana as destination only for quoting)
-      const dstAddress = isSolanaChain(toChainId) ? undefined : address;
+      const toAddr = isSolanaChain(toChainId) ? address : address;
 
-      const freshQuote = await getQuote({
-        srcChainId: fromChainId,
-        srcChainTokenIn: fromToken.address,
-        srcChainTokenInAmount: amountWei,
-        dstChainId: toChainId,
-        dstChainTokenOut: toToken.address,
-        prependOperatingExpenses: true,
-        srcChainOrderAuthorityAddress: address,
-        dstChainOrderAuthorityAddress: dstAddress,
-        dstChainTokenOutRecipient: dstAddress,
+      const freshRoute = await getRoute({
+        fromChain: fromChainId,
+        fromToken: fromToken.address,
+        fromAmount: amountWei,
+        fromAddress: address,
+        toChain: toChainId,
+        toToken: toToken.address,
+        toAddress: toAddr,
+        slippageConfig: { autoMode: 1 },
+        quoteOnly: false,
       });
 
-      setQuote(freshQuote);
+      setRouteResponse(freshRoute);
 
-      if (!freshQuote.tx) {
-        throw new Error("No transaction data returned. Destination wallet address may be required.");
+      if (!freshRoute.route.transactionRequest) {
+        throw new Error("No transaction data returned. Try again or adjust amount.");
       }
+
+      const txRequest = freshRoute.route.transactionRequest;
 
       // Approve token if ERC20 (not native)
       if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
         setStep("approving");
 
         const tokenContract = new ethers.Contract(fromToken.address, ERC20_ABI, signer);
-        const targetAddress = freshQuote.tx.to;
+        const targetAddress = txRequest.target;
         if (!targetAddress) throw new Error("No target address for approval");
 
-        // Approve the full amount including operating expenses
-        const approveAmount = freshQuote.estimation.srcChainTokenIn.amount;
         const currentAllowance = await tokenContract.allowance(address, targetAddress);
-        const amountBN = ethers.BigNumber.from(approveAmount);
+        const amountBN = ethers.BigNumber.from(amountWei);
 
         if (currentAllowance.lt(amountBN)) {
           const approveTx = await tokenContract.approve(targetAddress, ethers.constants.MaxUint256);
@@ -280,16 +280,19 @@ export function SwapCard() {
       setStep("swapping");
 
       const txResponse = await walletClient.sendTransaction({
-        to: freshQuote.tx.to as `0x${string}`,
-        data: freshQuote.tx.data as `0x${string}`,
-        value: freshQuote.tx.value ? BigInt(freshQuote.tx.value) : BigInt(0),
+        to: txRequest.target as `0x${string}`,
+        data: txRequest.data as `0x${string}`,
+        value: txRequest.value ? BigInt(txRequest.value) : BigInt(0),
+        ...(txRequest.gasLimit ? { gas: BigInt(txRequest.gasLimit) } : {}),
       });
 
       setActiveTx({
         hash: txResponse,
-        orderId: freshQuote.orderId || "",
         fromChainId,
         toChainId,
+        requestId: freshRoute.requestId,
+        quoteId: freshRoute.route.quoteId || "",
+        bridgeType: isChainflipChain(fromChainId) ? getChainflipBridgeType(toChainId) : undefined,
       });
       setStep("tracking");
     } catch (err: unknown) {
@@ -307,24 +310,27 @@ export function SwapCard() {
 
   const handleTxComplete = useCallback(() => {
     setStep("idle");
-    setQuote(null);
+    setRouteResponse(null);
     setAmount("");
     setActiveTx(null);
+    setDepositInfo(null);
   }, []);
 
   const handleTxDismiss = useCallback(() => {
     setStep("idle");
     setActiveTx(null);
+    setDepositInfo(null);
   }, []);
 
-  // Computed values from deBridge estimation
-  const estimation = quote?.estimation;
-  const estimatedOutput = estimation?.dstChainTokenOut
-    ? formatTokenAmount(estimation.dstChainTokenOut.recommendedAmount || estimation.dstChainTokenOut.amount, toToken?.decimals || 18)
+  // Computed values from Squid route estimate
+  const route = routeResponse?.route;
+  const estimate = route?.estimate;
+  const estimatedOutput = estimate?.toAmount && toToken
+    ? formatTokenAmount(estimate.toAmount, toToken.decimals)
     : null;
-  const fromAmountUSD = estimation?.srcChainTokenIn?.approximateUsdValue;
-  const toAmountUSD = estimation?.dstChainTokenOut?.recommendedApproximateUsdValue || estimation?.dstChainTokenOut?.approximateUsdValue;
-  const fulfillmentDelay = quote?.order?.approximateFulfillmentDelay;
+  const fromAmountUSD = estimate?.fromAmountUSD ? parseFloat(estimate.fromAmountUSD) : undefined;
+  const toAmountUSD = estimate?.toAmountUSD ? parseFloat(estimate.toAmountUSD) : undefined;
+  const estimatedDuration = estimate?.estimatedRouteDuration;
 
   const isValidInput = fromToken && toToken && amount && parseFloat(amount) > 0;
   const isSolanaSource = isSolanaChain(fromChainId);
@@ -469,37 +475,35 @@ export function SwapCard() {
         </div>
 
         {/* Route Details */}
-        {quote && estimation && (
+        {route && estimate && (
           <div className="mt-3 p-3 bg-gray-800/20 rounded-xl border border-gray-700/20 space-y-1.5">
-            {fulfillmentDelay !== undefined && (
+            {estimatedDuration !== undefined && (
               <div className="flex justify-between text-xs">
                 <span className="text-gray-400">Est. Time</span>
                 <span className="text-gray-300">
-                  {fulfillmentDelay < 60 ? `~${fulfillmentDelay}s` : `~${Math.ceil(fulfillmentDelay / 60)} min`}
+                  {estimatedDuration < 60 ? `~${estimatedDuration}s` : `~${Math.ceil(estimatedDuration / 60)} min`}
                 </span>
               </div>
             )}
-            {estimation.srcChainTokenIn?.approximateUsdValue !== undefined &&
-              estimation.dstChainTokenOut?.approximateUsdValue !== undefined && (
+            {estimate.exchangeRate && (
               <div className="flex justify-between text-xs">
                 <span className="text-gray-400">Exchange Rate</span>
                 <span className="text-gray-300">
-                  1 {fromToken?.symbol} ≈{" "}
-                  {(
-                    estimation.dstChainTokenOut.approximateUsdValue /
-                    estimation.srcChainTokenIn.approximateUsdValue *
-                    parseFloat(ethers.utils.formatUnits(estimation.srcChainTokenIn.amount, fromToken?.decimals || 18)) /
-                    parseFloat(ethers.utils.formatUnits(estimation.dstChainTokenOut.amount, toToken?.decimals || 18))
-                  ).toFixed(4)}{" "}
-                  {toToken?.symbol}
+                  1 {fromToken?.symbol} ≈ {parseFloat(estimate.exchangeRate).toFixed(4)} {toToken?.symbol}
                 </span>
               </div>
             )}
-            {quote.fixFee && (
+            {estimate.aggregatePriceImpact && parseFloat(estimate.aggregatePriceImpact) > 0 && (
               <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Protocol Fee</span>
+                <span className="text-gray-400">Price Impact</span>
+                <span className="text-gray-300">{parseFloat(estimate.aggregatePriceImpact).toFixed(2)}%</span>
+              </div>
+            )}
+            {estimate.feeCosts && estimate.feeCosts.length > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Fees</span>
                 <span className="text-gray-300">
-                  {ethers.utils.formatUnits(quote.fixFee, 18)} {SUPPORTED_CHAINS.find(c => c.chainId === fromChainId)?.nativeCurrency}
+                  ${estimate.feeCosts.reduce((sum, f) => sum + parseFloat(f.amountUSD || "0"), 0).toFixed(2)}
                 </span>
               </div>
             )}
@@ -532,9 +536,11 @@ export function SwapCard() {
           ) : step === "tracking" && activeTx ? (
             <TransactionStatus
               txHash={activeTx.hash}
-              orderId={activeTx.orderId}
               fromChainId={activeTx.fromChainId}
               toChainId={activeTx.toChainId}
+              requestId={activeTx.requestId}
+              quoteId={activeTx.quoteId}
+              bridgeType={activeTx.bridgeType}
               onComplete={handleTxComplete}
               onDismiss={handleTxDismiss}
             />
@@ -565,7 +571,7 @@ export function SwapCard() {
                 Getting best price...
               </span>
             </button>
-          ) : !quote ? (
+          ) : !route ? (
             <button disabled className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gray-700 text-gray-500 cursor-not-allowed">
               {error ? "No route available" : "Enter an amount"}
             </button>
@@ -615,12 +621,12 @@ export function SwapCard() {
           <span className="text-xs text-gray-600">
             Powered by{" "}
             <a
-              href="https://debridge.finance"
+              href="https://squidrouter.com"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-500 hover:text-violet-400 transition-colors"
             >
-              deBridge
+              Squid Router
             </a>
           </span>
         </div>
