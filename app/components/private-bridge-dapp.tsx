@@ -68,7 +68,6 @@ interface ActiveTx {
   requestId: string;
   quoteId: string;
   bridgeType?: string;
-  solanaSignature?: string; // Solana tx signature for explorer links
 }
 
 function getPhantomProvider(): PhantomProvider | null {
@@ -392,7 +391,7 @@ export function SwapCard() {
 
   // Execute Solana → EVM swap
   // Handles two Squid response types:
-  // 1. ON_CHAIN_EXECUTION: Squid returns a serialized Solana tx to sign & send directly (Axelar/GMP flow)
+  // 1. ON_CHAIN_EXECUTION: Squid returns a serialized Solana tx to sign & send directly
   // 2. CHAINFLIP_DEPOSIT_ADDRESS: Need to call /deposit-address then do a simple SOL transfer
   const handleSolanaSwap = useCallback(async () => {
     if (!solanaAddress || !fromToken || !toToken || !amount || !address) return;
@@ -411,7 +410,6 @@ export function SwapCard() {
       const amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
 
       // Get route with real addresses
-      console.log("Step 1: Getting route...");
       const freshRoute = await getRoute({
         fromChain: fromChainId,
         fromToken: fromToken.address,
@@ -425,7 +423,6 @@ export function SwapCard() {
       });
 
       setRouteResponse(freshRoute);
-      console.log("Route received, requestId:", freshRoute.requestId);
 
       if (!freshRoute.route.transactionRequest) {
         throw new Error("No transaction data returned. Try again or adjust amount.");
@@ -438,7 +435,7 @@ export function SwapCard() {
       setStep("swapping");
 
       if (txType === "ON_CHAIN_EXECUTION") {
-        // Direct Solana transaction — deserialize the base64 data, sign & send
+        // Direct Solana transaction — deserialize, sign, send
         const txData = txRequest.data as string;
         const txBytes = Uint8Array.from(atob(txData), (c) => c.charCodeAt(0));
 
@@ -448,6 +445,8 @@ export function SwapCard() {
         try {
           const versionedTx = VersionedTransaction.deserialize(txBytes);
           console.log("Deserialized as VersionedTransaction");
+
+          // Phantom signs and sends VersionedTransaction
           const result = await phantom.signAndSendTransaction(versionedTx, {
             skipPreflight: false,
           });
@@ -455,6 +454,7 @@ export function SwapCard() {
         } catch (versionedErr) {
           console.log("VersionedTransaction failed, trying legacy Transaction:", versionedErr);
           const legacyTx = Transaction.from(txBytes);
+
           const result = await phantom.signAndSendTransaction(legacyTx, {
             skipPreflight: false,
           });
@@ -462,30 +462,24 @@ export function SwapCard() {
         }
 
         console.log("Solana tx signature:", signature);
-        console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        // Track using requestId as transactionId (Axelar/GMP flow)
-        // The Solana tx signature won't work for Squid status API — use requestId instead
+        // Track via requestId (Squid Axelar flow, not Chainflip)
         setActiveTx({
-          hash: freshRoute.requestId || signature,
+          hash: signature,
           fromChainId,
           toChainId,
           requestId: freshRoute.requestId,
           quoteId: freshRoute.route.quoteId || "",
-          solanaSignature: signature, // Keep for explorer link
-          // No bridgeType for ON_CHAIN_EXECUTION (uses Axelar, not Chainflip)
+          // No bridgeType needed for ON_CHAIN_EXECUTION
         });
         setStep("tracking");
 
       } else if (txType === "CHAINFLIP_DEPOSIT_ADDRESS") {
         // Deposit address flow — call /deposit-address, then simple SOL transfer
         setStep("approving");
-        console.log("Step 2: Getting deposit address...");
 
         const depositResult = await getDepositAddress(txRequest);
-        console.log("Deposit address:", depositResult.depositAddress);
-        console.log("Deposit amount (lamports):", depositResult.amount);
-        console.log("Chainflip tracking ID:", depositResult.chainflipStatusTrackingId);
+        console.log("Deposit address result:", depositResult);
 
         setDepositInfo({
           address: depositResult.depositAddress,
@@ -493,7 +487,6 @@ export function SwapCard() {
         });
 
         setStep("swapping");
-        console.log("Step 3: Sending SOL to deposit address...");
 
         const connection = new Connection(SOLANA_RPC, "confirmed");
         const fromPubkey = new PublicKey(solanaAddress);
@@ -518,11 +511,8 @@ export function SwapCard() {
         });
 
         console.log("SOL deposit transfer signature:", signature);
-        console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        // Track with chainflipStatusTrackingId + bridgeType
         const bridgeType = getChainflipBridgeType(toChainId);
-        console.log("Step 4: Tracking with bridgeType:", bridgeType);
 
         setActiveTx({
           hash: depositResult.chainflipStatusTrackingId,
@@ -531,7 +521,6 @@ export function SwapCard() {
           requestId: freshRoute.requestId,
           quoteId: freshRoute.route.quoteId || "",
           bridgeType,
-          solanaSignature: signature, // Keep for explorer link
         });
         setStep("tracking");
 
@@ -831,7 +820,6 @@ export function SwapCard() {
               requestId={activeTx.requestId}
               quoteId={activeTx.quoteId}
               bridgeType={activeTx.bridgeType}
-              solanaSignature={activeTx.solanaSignature}
               onComplete={handleTxComplete}
               onDismiss={handleTxDismiss}
             />
