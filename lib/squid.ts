@@ -92,9 +92,12 @@ export interface SquidTransactionRequest {
   maxPriorityFeePerGas?: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type SquidRawTransactionRequest = Record<string, any>;
+
 export interface SquidRoute {
   estimate: SquidEstimate;
-  transactionRequest?: SquidTransactionRequest;
+  transactionRequest?: SquidRawTransactionRequest;
   params: SquidRouteParams;
   quoteId?: string;
 }
@@ -167,8 +170,10 @@ export async function getRoute(
  * Uses the transactionRequest from the route response
  */
 export async function getDepositAddress(
-  transactionRequest: SquidTransactionRequest
+  transactionRequest: SquidRawTransactionRequest
 ): Promise<SquidDepositAddressResponse> {
+  console.log("Deposit address request body:", JSON.stringify(transactionRequest, null, 2));
+  
   const response = await fetch(`${SQUID_API_URL}/deposit-address`, {
     method: "POST",
     headers: getHeaders(),
@@ -177,6 +182,7 @@ export async function getDepositAddress(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    console.error("Deposit address error response:", JSON.stringify(errorData, null, 2));
     throw new Error(
       errorData.error?.message ||
         errorData.message ||
@@ -184,7 +190,9 @@ export async function getDepositAddress(
     );
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log("Deposit address response:", JSON.stringify(data, null, 2));
+  return data;
 }
 
 /**

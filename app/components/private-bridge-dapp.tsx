@@ -28,6 +28,7 @@ import {
   getDepositAddress,
   type SquidRoute,
   type SquidRouteResponse,
+  type SquidTransactionRequest,
   ERC20_ABI,
   isChainflipChain,
   getChainflipBridgeType,
@@ -334,7 +335,7 @@ export function SwapCard() {
         throw new Error("No transaction data returned. Try again or adjust amount.");
       }
 
-      const txRequest = freshRoute.route.transactionRequest;
+      const txRequest = freshRoute.route.transactionRequest as SquidTransactionRequest;
 
       // Approve token if ERC20 (not native)
       if (fromToken.address !== NATIVE_TOKEN_ADDRESS) {
@@ -420,6 +421,8 @@ export function SwapCard() {
       if (!freshRoute.route.transactionRequest) {
         throw new Error("No transaction data returned. Try again or adjust amount.");
       }
+
+      console.log("Solana route transactionRequest:", JSON.stringify(freshRoute.route.transactionRequest, null, 2));
 
       // Get deposit address from Squid
       setStep("approving");
