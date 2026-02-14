@@ -465,17 +465,16 @@ export function SwapCard() {
         console.log("Solana tx signature:", signature);
         console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        // For Solana ON_CHAIN_EXECUTION: use chainflipStatusTrackingId for status API
-        const chainflipTrackingId = (txRequest.chainflipStatusTrackingId as string) || "";
+        // For Solana ON_CHAIN_EXECUTION: use the Solana signature as transactionId for status API
         const bridgeType = getChainflipBridgeType(toChainId);
-        console.log("Chainflip Status Tracking ID:", chainflipTrackingId);
         console.log("Bridge Type:", bridgeType);
+        console.log("Status tracking with signature:", signature);
 
         setActiveTx({
-          hash: chainflipTrackingId || signature,
+          hash: signature,
           fromChainId,
           toChainId,
-          requestId: chainflipTrackingId,
+          requestId: signature, // Use the Solana signature for status tracking
           quoteId: freshRoute.route.quoteId || "",
           bridgeType,
           solanaSignature: signature,
