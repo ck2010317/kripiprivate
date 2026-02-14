@@ -7,7 +7,6 @@ import {
   Connection,
   PublicKey,
   Transaction,
-  VersionedTransaction,
   SystemProgram,
 } from "@solana/web3.js";
 import { ChainSelector } from "./ChainSelector";
@@ -41,12 +40,12 @@ interface PhantomProvider {
   connect(): Promise<{ publicKey: { toBase58(): string } }>;
   disconnect(): Promise<void>;
   signAndSendTransaction(
-    transaction: Transaction | VersionedTransaction,
+    transaction: Transaction,
     options?: { skipPreflight?: boolean }
   ): Promise<{ signature: string }>;
   signTransaction(
-    transaction: Transaction | VersionedTransaction
-  ): Promise<Transaction | VersionedTransaction>;
+    transaction: Transaction
+  ): Promise<Transaction>;
   isConnected: boolean;
 }
 
@@ -68,6 +67,7 @@ interface ActiveTx {
   requestId: string;
   quoteId: string;
   bridgeType?: string;
+  solanaSignature?: string; // Solana tx signature for explorer links
 }
 
 function getPhantomProvider(): PhantomProvider | null {
@@ -389,10 +389,8 @@ export function SwapCard() {
     }
   }, [walletClient, address, fromToken, toToken, amount, fromChainId, toChainId, walletChainId, switchChainAsync, slippage]);
 
-  // Execute Solana → EVM swap
-  // Handles two Squid response types:
-  // 1. ON_CHAIN_EXECUTION: Squid returns a serialized Solana tx to sign & send directly
-  // 2. CHAINFLIP_DEPOSIT_ADDRESS: Need to call /deposit-address then do a simple SOL transfer
+  // Execute Solana → EVM swap via Chainflip deposit-address flow
+  // Official Squid flow: get route → send transactionRequest to /deposit-address → simple SOL transfer → track with chainflipStatusTrackingId
   const handleSolanaSwap = useCallback(async () => {
     if (!solanaAddress || !fromToken || !toToken || !amount || !address) return;
     if (!isSolanaChain(fromChainId)) return;
@@ -409,7 +407,8 @@ export function SwapCard() {
     try {
       const amountWei = ethers.utils.parseUnits(amount, fromToken.decimals).toString();
 
-      // Get route with real addresses
+      // Step 1: Get route with real addresses
+      console.log("Step 1: Getting route...");
       const freshRoute = await getRoute({
         fromChain: fromChainId,
         fromToken: fromToken.address,
@@ -423,110 +422,70 @@ export function SwapCard() {
       });
 
       setRouteResponse(freshRoute);
+      console.log("Route received, requestId:", freshRoute.requestId);
 
       if (!freshRoute.route.transactionRequest) {
         throw new Error("No transaction data returned. Try again or adjust amount.");
       }
 
-      const txRequest = freshRoute.route.transactionRequest;
-      const txType = txRequest.type as string;
-      console.log("Solana route transactionRequest type:", txType);
+      // Step 2: Get deposit address by sending transactionRequest to /deposit-address
+      setStep("approving");
+      console.log("Step 2: Getting deposit address...");
 
+      const depositResult = await getDepositAddress(freshRoute.route.transactionRequest);
+      console.log("Deposit address:", depositResult.depositAddress);
+      console.log("Deposit amount (lamports):", depositResult.amount);
+      console.log("Chainflip tracking ID:", depositResult.chainflipStatusTrackingId);
+
+      setDepositInfo({
+        address: depositResult.depositAddress,
+        trackingId: depositResult.chainflipStatusTrackingId,
+      });
+
+      // Step 3: Simple SOL transfer to the deposit address
       setStep("swapping");
+      console.log("Step 3: Sending SOL to deposit address...");
 
-      if (txType === "ON_CHAIN_EXECUTION") {
-        // Direct Solana transaction — deserialize, sign, send
-        const txData = txRequest.data as string;
-        const txBytes = Uint8Array.from(atob(txData), (c) => c.charCodeAt(0));
+      const connection = new Connection(SOLANA_RPC, "confirmed");
+      const fromPubkey = new PublicKey(solanaAddress);
+      const toPubkey = new PublicKey(depositResult.depositAddress);
+      const lamports = parseInt(depositResult.amount);
 
-        let signature: string;
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports,
+        })
+      );
 
-        // Try as VersionedTransaction first, fall back to legacy Transaction
-        try {
-          const versionedTx = VersionedTransaction.deserialize(txBytes);
-          console.log("Deserialized as VersionedTransaction");
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+      transaction.feePayer = fromPubkey;
 
-          // Phantom signs and sends VersionedTransaction
-          const result = await phantom.signAndSendTransaction(versionedTx, {
-            skipPreflight: false,
-          });
-          signature = result.signature;
-        } catch (versionedErr) {
-          console.log("VersionedTransaction failed, trying legacy Transaction:", versionedErr);
-          const legacyTx = Transaction.from(txBytes);
+      const { signature } = await phantom.signAndSendTransaction(transaction, {
+        skipPreflight: false,
+      });
 
-          const result = await phantom.signAndSendTransaction(legacyTx, {
-            skipPreflight: false,
-          });
-          signature = result.signature;
-        }
+      console.log("SOL deposit transfer signature:", signature);
+      console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        console.log("Solana tx signature:", signature);
+      // Step 4: Track status using chainflipStatusTrackingId + bridgeType
+      const bridgeType = getChainflipBridgeType(toChainId);
+      console.log("Step 4: Tracking with bridgeType:", bridgeType);
 
-        // Track via requestId (Squid Axelar flow, not Chainflip)
-        setActiveTx({
-          hash: signature,
-          fromChainId,
-          toChainId,
-          requestId: freshRoute.requestId,
-          quoteId: freshRoute.route.quoteId || "",
-          // No bridgeType needed for ON_CHAIN_EXECUTION
-        });
-        setStep("tracking");
+      setActiveTx({
+        hash: depositResult.chainflipStatusTrackingId,
+        fromChainId,
+        toChainId,
+        requestId: freshRoute.requestId,
+        quoteId: freshRoute.route.quoteId || "",
+        bridgeType,
+        solanaSignature: signature, // Keep for explorer link
+      });
+      setStep("tracking");
 
-      } else if (txType === "CHAINFLIP_DEPOSIT_ADDRESS") {
-        // Deposit address flow — call /deposit-address, then simple SOL transfer
-        setStep("approving");
-
-        const depositResult = await getDepositAddress(txRequest);
-        console.log("Deposit address result:", depositResult);
-
-        setDepositInfo({
-          address: depositResult.depositAddress,
-          trackingId: depositResult.chainflipStatusTrackingId,
-        });
-
-        setStep("swapping");
-
-        const connection = new Connection(SOLANA_RPC, "confirmed");
-        const fromPubkey = new PublicKey(solanaAddress);
-        const toPubkey = new PublicKey(depositResult.depositAddress);
-        const lamports = parseInt(depositResult.amount);
-
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey,
-            toPubkey,
-            lamports,
-          })
-        );
-
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.lastValidBlockHeight = lastValidBlockHeight;
-        transaction.feePayer = fromPubkey;
-
-        const { signature } = await phantom.signAndSendTransaction(transaction, {
-          skipPreflight: false,
-        });
-
-        console.log("SOL deposit transfer signature:", signature);
-
-        const bridgeType = getChainflipBridgeType(toChainId);
-
-        setActiveTx({
-          hash: depositResult.chainflipStatusTrackingId,
-          fromChainId,
-          toChainId,
-          requestId: freshRoute.requestId,
-          quoteId: freshRoute.route.quoteId || "",
-          bridgeType,
-        });
-        setStep("tracking");
-
-      } else {
-        throw new Error(`Unsupported transaction type: ${txType}`);
-      }
     } catch (err: unknown) {
       console.error("Solana swap error:", err);
       const message =
@@ -820,6 +779,7 @@ export function SwapCard() {
               requestId={activeTx.requestId}
               quoteId={activeTx.quoteId}
               bridgeType={activeTx.bridgeType}
+              solanaSignature={activeTx.solanaSignature}
               onComplete={handleTxComplete}
               onDismiss={handleTxDismiss}
             />
