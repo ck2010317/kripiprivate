@@ -466,14 +466,17 @@ export function SwapCard() {
         console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
         // For Solana ON_CHAIN_EXECUTION: use requestId as transactionId for status API
-        // The Solana tx signature doesn't work as transactionId — Squid needs requestId
-        // Also need bridgeType for Solana→EVM status tracking
+        // requestId can come from: route response header, response body, or transactionRequest
+        const trackingId = freshRoute.requestId || (txRequest.requestId as string) || "";
         const bridgeType = getChainflipBridgeType(toChainId);
+        console.log("Status tracking ID:", trackingId);
+        console.log("Bridge type:", bridgeType);
+
         setActiveTx({
-          hash: freshRoute.requestId || signature,
+          hash: trackingId || signature, // Use requestId; fallback to signature if all else fails
           fromChainId,
           toChainId,
-          requestId: freshRoute.requestId,
+          requestId: trackingId,
           quoteId: freshRoute.route.quoteId || "",
           bridgeType,
           solanaSignature: signature, // Keep actual tx hash for explorer link

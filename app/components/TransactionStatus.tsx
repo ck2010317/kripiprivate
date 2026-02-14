@@ -57,6 +57,7 @@ export function TransactionStatus({
   // Poll transaction status via Squid
   const checkStatus = useCallback(async () => {
     try {
+      console.log("Status poll:", { transactionId: txHash, fromChainId, toChainId, bridgeType, requestId: requestId?.slice(0, 8) });
       const result = await getStatus({
         transactionId: txHash,
         fromChainId,

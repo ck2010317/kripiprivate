@@ -157,7 +157,11 @@ export async function getRoute(
   }
 
   const data = await response.json();
-  const requestId = response.headers.get("x-request-id") || "";
+  // x-request-id header may be blocked by CORS in browser, fallback to body
+  const requestId = response.headers.get("x-request-id") 
+    || data.requestId 
+    || data.route?.transactionRequest?.requestId 
+    || "";
 
   return {
     route: data.route,
