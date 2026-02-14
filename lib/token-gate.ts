@@ -5,7 +5,7 @@ const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://mainnet.helius-rpc
 
 // Required token for card issuance
 export const REQUIRED_TOKEN_MINT = "DrnF17MbiKXu7gVyfL13UydVvhFTSM7DDWN3Ui8npump"
-export const REQUIRED_TOKEN_AMOUNT = 10000000
+export const REQUIRED_TOKEN_AMOUNT = 5000000
 
 /**
  * Get token balance for a specific mint using direct RPC calls

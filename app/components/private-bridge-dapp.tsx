@@ -466,20 +466,18 @@ export function SwapCard() {
         console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
         // For Solana ON_CHAIN_EXECUTION: use requestId as transactionId for status API
-        // requestId can come from: route response header, response body, or transactionRequest
+        // This is Axelar/GMP flow, NOT Chainflip deposit-address
         const trackingId = freshRoute.requestId || (txRequest.requestId as string) || "";
-        const bridgeType = getChainflipBridgeType(toChainId);
         console.log("Status tracking ID:", trackingId);
-        console.log("Bridge type:", bridgeType);
 
         setActiveTx({
-          hash: trackingId || signature, // Use requestId; fallback to signature if all else fails
+          hash: trackingId || signature,
           fromChainId,
           toChainId,
           requestId: trackingId,
           quoteId: freshRoute.route.quoteId || "",
-          bridgeType,
-          solanaSignature: signature, // Keep actual tx hash for explorer link
+          // bridgeType only for CHAINFLIP_DEPOSIT_ADDRESS flow
+          solanaSignature: signature,
         });
         setStep("tracking");
 
