@@ -465,18 +465,19 @@ export function SwapCard() {
         console.log("Solana tx signature:", signature);
         console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
-        // For Solana ON_CHAIN_EXECUTION: use requestId as transactionId for status API
-        // This is Axelar/GMP flow, NOT Chainflip deposit-address
-        const trackingId = freshRoute.requestId || (txRequest.requestId as string) || "";
-        console.log("Status tracking ID:", trackingId);
+        // For Solana ON_CHAIN_EXECUTION: use chainflipStatusTrackingId for status API
+        const chainflipTrackingId = (txRequest.chainflipStatusTrackingId as string) || "";
+        const bridgeType = getChainflipBridgeType(toChainId);
+        console.log("Chainflip Status Tracking ID:", chainflipTrackingId);
+        console.log("Bridge Type:", bridgeType);
 
         setActiveTx({
-          hash: trackingId || signature,
+          hash: chainflipTrackingId || signature,
           fromChainId,
           toChainId,
-          requestId: trackingId,
+          requestId: chainflipTrackingId,
           quoteId: freshRoute.route.quoteId || "",
-          // bridgeType only for CHAINFLIP_DEPOSIT_ADDRESS flow
+          bridgeType,
           solanaSignature: signature,
         });
         setStep("tracking");
