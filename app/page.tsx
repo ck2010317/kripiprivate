@@ -1330,6 +1330,14 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
   const [kripiCardInputs, setKripiCardInputs] = useState<Record<string, string>>({})
   const [assigningCardId, setAssigningCardId] = useState<string | null>(null)
   const [assignMessage, setAssignMessage] = useState<{ cardId: string; type: "success" | "error"; text: string } | null>(null)
+  const [pendingPayments, setPendingPayments] = useState<Array<{
+    id: string; userId: string; userEmail: string; userName: string;
+    amountUsd: number; amountSol: number; topupAmount: number | null;
+    status: string; cardType: string; nameOnCard: string | null;
+    txSignature: string | null; createdAt: string; expiresAt: string;
+  }>>([])
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(null)
+  const [verifyMessage, setVerifyMessage] = useState<{ id: string; type: "success" | "error"; text: string } | null>(null)
 
   const ADMIN_EMAILS = ["shaann950@gmail.com"]
   const isAdmin = ADMIN_EMAILS.includes(userEmail)
@@ -1356,6 +1364,44 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
       setPendingCards(data.cards || [])
     } catch (err) {
       console.error("Failed to fetch pending cards:", err)
+    }
+  }
+
+  const fetchPendingPayments = async () => {
+    try {
+      const res = await fetch("/api/admin/payments/verify")
+      const data = await res.json()
+      setPendingPayments(data.payments || [])
+    } catch (err) {
+      console.error("Failed to fetch pending payments:", err)
+    }
+  }
+
+  const verifyPayment = async (paymentId: string) => {
+    setVerifyingPaymentId(paymentId)
+    setVerifyMessage(null)
+    try {
+      const res = await fetch("/api/admin/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setVerifyMessage({ id: paymentId, type: "error", text: data.error || "Failed to verify" })
+        return
+      }
+      setVerifyMessage({ id: paymentId, type: "success", text: data.message || "✅ Verified!" })
+      setTimeout(() => {
+        setPendingPayments(prev => prev.filter(p => p.id !== paymentId))
+        fetchPendingCards()
+        fetchStats()
+        setVerifyMessage(null)
+      }, 2000)
+    } catch {
+      setVerifyMessage({ id: paymentId, type: "error", text: "Network error" })
+    } finally {
+      setVerifyingPaymentId(null)
     }
   }
 
@@ -1392,11 +1438,12 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
     if (!isAdmin) return
     fetchStats()
     fetchPendingCards()
+    fetchPendingPayments()
   }, [isAdmin])
 
   useEffect(() => {
     if (!isAdmin || !autoRefresh) return
-    const interval = setInterval(() => { fetchStats(); fetchPendingCards() }, 10000)
+    const interval = setInterval(() => { fetchStats(); fetchPendingCards(); fetchPendingPayments() }, 10000)
     return () => clearInterval(interval)
   }, [isAdmin, autoRefresh])
 
@@ -1565,6 +1612,72 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                 </div>
               )}
             </Card>
+
+            {/* Pending Payments — Admin can verify manually */}
+            {pendingPayments.length > 0 && (
+              <Card className="p-6 bg-gradient-to-r from-orange-500/5 to-red-500/5 border-orange-500/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-5 h-5 text-orange-400" />
+                    <h2 className="text-lg font-bold">Pending Payments ({pendingPayments.length})</h2>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Users who paid but verification failed. Click &quot;Verify &amp; Issue Card&quot; to manually approve.
+                </p>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {pendingPayments.map((p) => (
+                    <div key={p.id} className="p-4 rounded-lg bg-card/50 border border-border/30">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              p.status === "PENDING" ? "bg-yellow-500/20 text-yellow-400" : "bg-blue-500/20 text-blue-400"
+                            }`}>{p.status}</span>
+                            <span className="text-sm font-bold">{p.userName || p.userEmail}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {p.cardType === "issue" ? "New Card" : "Topup"}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            <p>📧 {p.userEmail}</p>
+                            <p>💰 ${p.amountUsd.toFixed(2)} ({p.amountSol.toFixed(4)} SOL)
+                              {p.topupAmount && <span> · Topup: ${p.topupAmount.toFixed(2)}</span>}
+                            </p>
+                            {p.nameOnCard && <p>👤 {p.nameOnCard}</p>}
+                            {p.txSignature && (
+                              <p>🔗 TX: <a href={`https://solscan.io/tx/${p.txSignature}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{p.txSignature.slice(0, 24)}...</a></p>
+                            )}
+                            <p className="font-mono text-[10px] opacity-60">ID: {p.id}</p>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => verifyPayment(p.id)}
+                          disabled={verifyingPaymentId === p.id}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 whitespace-nowrap shrink-0"
+                        >
+                          {verifyingPaymentId === p.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>✅ Verify & Issue Card</>
+                          )}
+                        </Button>
+                      </div>
+                      {verifyMessage?.id === p.id && (
+                        <div className={`mt-2 text-sm px-3 py-2 rounded ${
+                          verifyMessage.type === "success"
+                            ? "bg-green-500/10 text-green-400 border border-green-500/30"
+                            : "bg-red-500/10 text-red-400 border border-red-500/30"
+                        }`}>
+                          {verifyMessage.text}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* Pending Card Assignments */}
             <Card className="p-6 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-yellow-500/20">
