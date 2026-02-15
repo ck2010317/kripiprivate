@@ -64,6 +64,8 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
   const [showCVV, setShowCVV] = useState(false)
   const [payment, setPayment] = useState<PaymentRequest | null>(null)
   const [timeLeft, setTimeLeft] = useState<number>(0)
+  const [manualTxSignature, setManualTxSignature] = useState("")
+  const [showManualVerification, setShowManualVerification] = useState(false)
 
   // Countdown timer for payment expiry
   useEffect(() => {
@@ -208,6 +210,61 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to complete payment")
       setStep("payment")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Manual verification with transaction signature
+  const handleManualVerification = async () => {
+    if (!manualTxSignature.trim()) {
+      setError("Please enter the transaction signature")
+      return
+    }
+
+    if (!payment) {
+      setError("Payment not found")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+    setStep("verifying")
+
+    try {
+      // Call the verification endpoint directly with the provided signature
+      const issueResponse = await fetch(`/api/payments/${payment.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txSignature: manualTxSignature.trim() }),
+      })
+
+      const issueData = await issueResponse.json()
+
+      if (!issueResponse.ok) {
+        console.error("[IssueCard] Error response:", issueData)
+        throw new Error(issueData.error || issueData.details || "Failed to verify payment")
+      }
+
+      if (!issueData.success) {
+        console.error("[IssueCard] Response not successful:", issueData)
+        throw new Error(issueData.error || issueData.message || "Card creation failed")
+      }
+
+      // Short delay for UX then show success
+      setTimeout(() => {
+        if (issueData.card) {
+          setIssuedCard(issueData.card)
+          setStep("success")
+        } else {
+          setError("Card was created but details could not be retrieved. Check your dashboard.")
+          setStep("form")
+        }
+      }, 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to verify payment")
+      setStep("payment")
+      setShowManualVerification(true)
     } finally {
       setLoading(false)
     }
@@ -367,6 +424,51 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
               </>
             )}
           </Button>
+
+          {/* Manual Verification Option */}
+          {showManualVerification || error?.includes("Payment not detected") ? (
+            <div className="mt-6 space-y-3">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  Payment received but not detected automatically? Enter your transaction signature:
+                </p>
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={manualTxSignature}
+                  onChange={(e) => setManualTxSignature(e.target.value)}
+                  placeholder="Paste your Solana transaction signature (64 char hash)"
+                  className="w-full px-4 py-3 rounded-lg bg-input border border-border/50 focus:border-primary outline-none text-sm font-mono"
+                />
+              </div>
+              <Button
+                onClick={handleManualVerification}
+                disabled={loading || !manualTxSignature.trim()}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 mr-2" />
+                    Verify with Signature
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => setShowManualVerification(false)}
+                variant="outline"
+                disabled={loading}
+                className="w-full"
+              >
+                Try Auto-Verify Again
+              </Button>
+            </div>
+          ) : null}
 
           {loading && (
             <Card className="mt-6 p-4 bg-blue-500/5 border border-blue-500/30">
