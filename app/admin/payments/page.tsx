@@ -4,235 +4,218 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Loader2, Check, Copy, AlertCircle } from "lucide-react"
+import { Loader2, Check, AlertCircle, RefreshCw } from "lucide-react"
 
-interface Payment {
+interface PendingPayment {
   id: string
   userId: string
+  userEmail: string
+  userName: string
   amountUsd: number
   amountSol: number
   status: string
-  cardholderName?: string
+  cardType: string
+  nameOnCard: string | null
+  txSignature: string | null
   createdAt: string
-  txSignature?: string
+  expiresAt: string
 }
 
 export default function AdminPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([])
+  const [payments, setPayments] = useState<PendingPayment[]>([])
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterStatus, setFilterStatus] = useState("PENDING")
-  const [copied, setCopied] = useState<string | null>(null)
+  const [manualTxSig, setManualTxSig] = useState("")
 
-  // Load pending payments
   useEffect(() => {
     loadPayments()
   }, [])
 
-  // Filter payments
-  useEffect(() => {
-    let filtered = payments
-    if (filterStatus) {
-      filtered = filtered.filter((p) => p.status === filterStatus)
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (p) =>
-          p.id.includes(searchQuery) ||
-          p.userId.includes(searchQuery) ||
-          p.cardholderName?.includes(searchQuery)
-      )
-    }
-    setFilteredPayments(filtered)
-  }, [payments, filterStatus, searchQuery])
-
   const loadPayments = async () => {
     try {
       setLoading(true)
-      // This would need a new endpoint to get all payments
-      // For now, we'll show the verification UI
-      setLoading(false)
-    } catch (err) {
+      setError("")
+      const res = await fetch("/api/admin/payments/verify")
+      const data = await res.json()
+      if (data.payments) {
+        setPayments(data.payments)
+      }
+    } catch {
       setError("Failed to load payments")
+    } finally {
       setLoading(false)
     }
   }
 
-  const handleVerifyPayment = async (paymentId: string, txSignature?: string) => {
+  const handleVerify = async (paymentId: string, txSig?: string) => {
     try {
       setVerifying(paymentId)
       setError("")
       setSuccess("")
 
-      const response = await fetch("/api/admin/payments/verify", {
+      const res = await fetch("/api/admin/payments/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentId,
-          txSignature: txSignature || undefined,
+          txSignature: txSig || manualTxSig || undefined,
         }),
       })
 
-      const data = await response.json()
+      const data = await res.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to verify payment")
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to verify")
       }
 
-      setSuccess(
-        `✓ Payment verified! Card issued for ${data.card?.nameOnCard || "user"}`
-      )
-
-      // Update the payment in the list
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.id === paymentId
-            ? { ...p, status: "COMPLETED" }
-            : p
-        )
-      )
-
-      // Clear after 3 seconds
-      setTimeout(() => setSuccess(""), 3000)
+      setSuccess(`✅ ${data.message}`)
+      // Remove from list
+      setPayments((prev) => prev.filter((p) => p.id !== paymentId))
+      setTimeout(() => setSuccess(""), 5000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to verify payment")
+      setError(err instanceof Error ? err.message : "Failed to verify")
     } finally {
       setVerifying(null)
     }
   }
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(field)
-    setTimeout(() => setCopied(null), 2000)
+  const timeAgo = (date: string) => {
+    const diff = Date.now() - new Date(date).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
   }
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Payment Verification</h1>
-          <p className="text-muted-foreground mt-2">
-            Manually verify payments and issue cards
-          </p>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Admin — Payment Verification</h1>
+            <p className="text-muted-foreground mt-1">
+              Manually verify payments and issue cards
+            </p>
+          </div>
+          <Button variant="outline" onClick={loadPayments} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
 
-        {/* Search & Filter */}
-        <Card className="p-6 space-y-4">
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Search</label>
-              <Input
-                placeholder="Payment ID, User ID, or Cardholder Name"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Filter by Status</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg bg-input border border-border/50 focus:border-primary outline-none"
-              >
-                <option value="PENDING">Pending</option>
-                <option value="VERIFIED">Verified</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="">All</option>
-              </select>
-            </div>
-          </div>
-        </Card>
-
-        {/* Messages */}
         {error && (
           <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />
+            <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
             <p className="text-destructive">{error}</p>
           </div>
         )}
 
         {success && (
           <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-            <p className="text-green-600">{success}</p>
+            <Check className="w-5 h-5 text-green-500 mt-0.5" />
+            <p className="text-green-500 font-medium">{success}</p>
           </div>
         )}
 
-        {/* Manual Verification Form */}
+        {/* Quick Manual Verify by Payment ID */}
         <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Verify a Payment</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Payment ID</label>
-              <Input
-                id="paymentId"
-                placeholder="Enter payment ID to verify"
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Solana Transaction Signature (Optional)
-              </label>
-              <Input
-                id="txSignature"
-                placeholder="Optional: Paste Solana tx signature if you have it"
-                className="font-mono"
-              />
-            </div>
+          <h2 className="text-lg font-semibold mb-4">Quick Verify</h2>
+          <div className="grid md:grid-cols-3 gap-3">
+            <Input
+              id="qPaymentId"
+              placeholder="Payment ID"
+              className="font-mono text-sm"
+            />
+            <Input
+              value={manualTxSig}
+              onChange={(e) => setManualTxSig(e.target.value)}
+              placeholder="Solana TX Signature (optional)"
+              className="font-mono text-sm"
+            />
             <Button
               onClick={() => {
-                const paymentId = (
-                  document.getElementById("paymentId") as HTMLInputElement
-                )?.value
-                const txSignature = (
-                  document.getElementById("txSignature") as HTMLInputElement
-                )?.value
-
-                if (!paymentId) {
-                  setError("Please enter a Payment ID")
-                  return
-                }
-
-                handleVerifyPayment(paymentId, txSignature)
+                const pid = (document.getElementById("qPaymentId") as HTMLInputElement)?.value
+                if (!pid) { setError("Enter a Payment ID"); return }
+                handleVerify(pid)
               }}
               disabled={verifying !== null}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:shadow-lg"
+              className="bg-green-600 hover:bg-green-700"
             >
-              {verifying ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Verify & Issue Card
-                </>
-              )}
+              {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+              Verify & Issue Card
             </Button>
           </div>
         </Card>
 
-        {/* Instructions */}
-        <Card className="p-6 bg-blue-500/5 border border-blue-500/30">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-blue-500" />
-            How to use this:
-          </h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            <li>Get the Payment ID from the user (visible in their payment request)</li>
-            <li>Optionally, get the Solana transaction signature from them or explorer</li>
-            <li>Click "Verify & Issue Card"</li>
-            <li>The card will be immediately issued and ready to use</li>
-          </ol>
-        </Card>
+        {/* Pending Payments List */}
+        <div>
+          <h2 className="text-lg font-semibold mb-3">
+            Pending Payments ({payments.length})
+          </h2>
+
+          {loading ? (
+            <Card className="p-8 text-center">
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
+              <p className="mt-3 text-muted-foreground">Loading payments...</p>
+            </Card>
+          ) : payments.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">No pending payments 🎉</p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {payments.map((p) => (
+                <Card key={p.id} className="p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold">{p.userName || p.userEmail}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-500">
+                          {p.status}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{timeAgo(p.createdAt)}</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-0.5">
+                        <p>
+                          <span className="font-medium text-foreground">${p.amountUsd.toFixed(2)}</span>
+                          {" · "}{p.amountSol.toFixed(4)} SOL
+                          {" · "}{p.cardType === "issue" ? "New Card" : "Topup"}
+                          {p.nameOnCard && ` · ${p.nameOnCard}`}
+                        </p>
+                        <p className="font-mono text-xs truncate">
+                          ID: {p.id}
+                        </p>
+                        {p.txSignature && (
+                          <p className="font-mono text-xs truncate">
+                            TX: {p.txSignature}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleVerify(p.id, p.txSignature || undefined)}
+                      disabled={verifying === p.id}
+                      className="bg-green-600 hover:bg-green-700 shrink-0"
+                    >
+                      {verifying === p.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 mr-1" />
+                          Verify
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
