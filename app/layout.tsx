@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "PrivatePay - Private DeFi & Card Issuance",
   description:
     "Privacy-focused payment and DeFi platform. Issue branded cards, manage crypto wallets, and execute anonymous swaps on Solana.",
-  metadataBase: new URL("https://privatepay.app"),
+  metadataBase: new URL("https://privatepay.site"),
   icons: {
     icon: [
       {

@@ -27,6 +27,7 @@ interface IssuedCard {
   cvv: string
   nameOnCard: string
   balance: number
+  status: string
 }
 
 interface PaymentRequest {

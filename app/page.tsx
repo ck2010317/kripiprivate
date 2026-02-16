@@ -30,6 +30,7 @@ import { IssueCardFlow } from "@/app/components/issue-card-flow"
 import { CardPurchase } from "@/app/components/card-purchase"
 import { ChatWidget } from "@/app/components/chat-widget"
 import { ReferralDashboard } from "@/app/components/referral-dashboard"
+import { OpenClawIntegration } from "@/app/components/openclaw-integration"
 
 // Scroll Animation Hook
 function useScrollAnimation() {
@@ -210,10 +211,14 @@ function HomeContent() {
           onCreateCard={() => setActiveTab("issuing")}
           onAdmin={user.email === "shaann950@gmail.com" ? () => setActiveTab("admin") : undefined}
           onReferrals={() => setActiveTab("referrals")}
+          onOpenClaw={() => setActiveTab("openclaw")}
         />
       )}
       {activeTab === "referrals" && user && (
         <ReferralDashboard onBack={() => setActiveTab("dashboard")} />
+      )}
+      {activeTab === "openclaw" && user && (
+        <OpenClawIntegration onBack={() => setActiveTab("dashboard")} />
       )}
       {activeTab === "wallet" && <WalletPage setActiveTab={setActiveTab} />}
       {activeTab === "admin" && user && (
