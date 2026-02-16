@@ -16,6 +16,8 @@ interface TransactionStatusProps {
   quoteId: string;
   bridgeType?: string;
   solanaSignature?: string; // Actual Solana tx signature for explorer links
+  toAddress?: string; // Destination address to check balance (for Solana sources)
+  toToken?: { address: string; decimals: number }; // Token to check (for Solana sources)
   onComplete: () => void;
   onDismiss: () => void;
 }
@@ -28,6 +30,8 @@ export function TransactionStatus({
   quoteId,
   bridgeType,
   solanaSignature,
+  toAddress,
+  toToken,
   onComplete,
   onDismiss,
 }: TransactionStatusProps) {
@@ -38,7 +42,10 @@ export function TransactionStatus({
   const [failCount, setFailCount] = useState(0);
   const [notFoundCount, setNotFoundCount] = useState(0);
   const MAX_POLL_FAILURES = 30; // Stop after ~2.5 min of actual errors
-  const MAX_NOT_FOUND = 60; // Allow up to 5 min of 'not found yet' (Squid indexing delay)
+  const MAX_NOT_FOUND = 20; // For ON_CHAIN_EXECUTION: Squid doesn't index these, auto-complete after 100s
+
+  const isSolanaSource = isSolanaChain(fromChainId);
+  const isONCHAIN = !bridgeType; // ON_CHAIN_EXECUTION has no bridgeType
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
@@ -96,15 +103,22 @@ export function TransactionStatus({
 
     if (isTerminal) return;
 
+    // For ON_CHAIN_EXECUTION (Solana source): Squid doesn't index these transactions
+    // Auto-complete after brief wait since the bridge executes asynchronously on-chain
+    if (isSolanaSource && isONCHAIN && notFoundCount >= MAX_NOT_FOUND) {
+      console.log("[Status] ON_CHAIN_EXECUTION - auto-completing. Bridge executing on-chain.");
+      setStatus("likely_complete");
+      return;
+    }
+
     // Stop polling after too many consecutive actual errors
     if (failCount >= MAX_POLL_FAILURES) {
       setError("Status tracking encountered errors. Your swap may still complete — check the explorer link below.");
       return;
     }
 
-    // After extended 'not found' period, show as likely complete
-    // (Squid sometimes doesn't index Solana ON_CHAIN_EXECUTION txs)
-    if (notFoundCount >= MAX_NOT_FOUND) {
+    // After extended 'not found' period for other flows, show as likely complete
+    if (!isONCHAIN && notFoundCount >= 60) {
       setStatus("likely_complete");
       return;
     }
@@ -113,7 +127,7 @@ export function TransactionStatus({
     checkStatus(); // initial check
 
     return () => clearInterval(interval);
-  }, [status, checkStatus, failCount, notFoundCount]);
+  }, [status, checkStatus, failCount, notFoundCount, isSolanaSource, isONCHAIN]);
 
   const isComplete = SQUID_COMPLETED_STATES.includes(status);
   const isFailed = SQUID_FAILED_STATES.includes(status);
@@ -187,14 +201,19 @@ export function TransactionStatus({
           <div className="flex-1">
             <p className="text-sm font-semibold text-white">
               {isComplete 
-                ? status === "likely_complete" 
-                  ? "Swap Likely Complete!" 
+                ? status === "likely_complete" && isSolanaSource && isONCHAIN
+                  ? "Swap Confirmed! Bridging..."
+                  : status === "likely_complete"
+                  ? "Swap Likely Complete!"
                   : "Bridge Complete!" 
                 : isFailed ? "Bridge Failed" : "Bridging in Progress"}
             </p>
             <p className="text-[11px] text-gray-500">
               {fromChain?.name} → {toChain?.name}
-              {isComplete && status === "likely_complete" && (
+              {isComplete && status === "likely_complete" && isSolanaSource && isONCHAIN && (
+                <span className="ml-1">• Check your wallet in 1-2 min</span>
+              )}
+              {isComplete && status === "likely_complete" && (!isSolanaSource || !isONCHAIN) && (
                 <span className="ml-1">• Check explorer to confirm</span>
               )}
               {!isComplete && !isFailed && (

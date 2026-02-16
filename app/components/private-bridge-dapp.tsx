@@ -829,6 +829,8 @@ export function SwapCard() {
               quoteId={activeTx.quoteId}
               bridgeType={activeTx.bridgeType}
               solanaSignature={activeTx.solanaSignature}
+              toAddress={address}
+              toToken={toToken}
               onComplete={handleTxComplete}
               onDismiss={handleTxDismiss}
             />
