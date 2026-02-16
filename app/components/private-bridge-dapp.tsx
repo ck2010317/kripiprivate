@@ -466,17 +466,16 @@ export function SwapCard() {
         console.log(`Solscan: https://solscan.io/tx/${signature}`);
 
         // For Solana ON_CHAIN_EXECUTION: use the Solana signature as transactionId for status API
-        const bridgeType = getChainflipBridgeType(toChainId);
-        console.log("Bridge Type:", bridgeType);
-        console.log("Status tracking with signature:", signature);
+        // IMPORTANT: Do NOT include bridgeType for ON_CHAIN_EXECUTION routes per Squid support
+        console.log("Status tracking with signature (ON_CHAIN_EXECUTION):", signature);
 
         setActiveTx({
           hash: signature,
           fromChainId,
           toChainId,
-          requestId: signature, // Use the Solana signature for status tracking
+          requestId: freshRoute.requestId || signature,
           quoteId: freshRoute.route.quoteId || "",
-          bridgeType,
+          // No bridgeType for ON_CHAIN_EXECUTION routes
           solanaSignature: signature,
         });
         setStep("tracking");
