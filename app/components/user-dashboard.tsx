@@ -21,7 +21,6 @@ import {
   Clock,
 } from "lucide-react"
 import { useAuth } from "@/app/context/auth-context"
-import { TelegramConnect } from "@/app/components/telegram-connect"
 
 interface CardData {
   id: string
@@ -40,10 +39,9 @@ interface UserDashboardProps {
   onCreateCard: () => void
   onAdmin?: () => void
   onReferrals?: () => void
-  onOpenClaw?: () => void
 }
 
-export function UserDashboard({ onBack, onCreateCard, onAdmin, onReferrals, onOpenClaw }: UserDashboardProps) {
+export function UserDashboard({ onBack, onCreateCard, onAdmin, onReferrals }: UserDashboardProps) {
   const { user, logout } = useAuth()
   const [cards, setCards] = useState<CardData[]>([])
   const [loading, setLoading] = useState(true)
@@ -202,11 +200,6 @@ export function UserDashboard({ onBack, onCreateCard, onAdmin, onReferrals, onOp
                 🎁 Referrals
               </Button>
             )}
-            {onOpenClaw && (
-              <Button variant="outline" size="sm" onClick={onOpenClaw} className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
-                🦞 AI Agent
-              </Button>
-            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -215,11 +208,6 @@ export function UserDashboard({ onBack, onCreateCard, onAdmin, onReferrals, onOp
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Telegram Bot Connection */}
-        <div className="mb-6">
-          <TelegramConnect />
-        </div>
-
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />

@@ -34,39 +34,6 @@ model User {
   payments      Payment[]
   apiKeys       ApiKey[]
   referralLogs  ReferralLog[]  // Logs of referral rewards earned
-  personalTokens PersonalAccessToken[]
-  telegramLink  TelegramLink?
-}
-
-// ============================================
-// Personal Access Tokens (for OpenClaw / external AI agents)
-// Users generate these to let their AI agent access ONLY their own data
-// ============================================
-model PersonalAccessToken {
-  id            String   @id @default(cuid())
-  
-  // Token info
-  name          String   @default("OpenClaw Agent")
-  token         String   @unique           // pat_xxxxxxxxxxxx
-  hashedToken   String                     // SHA-256 hash for lookup
-  
-  // Owner - user can ONLY access their own data
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Scopes - granular permissions
-  scopes        String   @default("read:profile,read:cards,read:transactions,read:payments")
-  
-  // Security
-  isActive      Boolean  @default(true)
-  lastUsedAt    DateTime?
-  expiresAt     DateTime?                  // null = never expires
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([hashedToken])
-  @@index([userId])
 }
 
 model ReferralLog {
@@ -401,50 +368,4 @@ model ApiCard {
   @@index([externalId])
 }
 
-// ============================================
-// Telegram Bot Integration
-// Links a Telegram account to a PrivatePay user
-// ============================================
-model TelegramLink {
-  id            String   @id @default(cuid())
-  
-  // Telegram user info
-  telegramId    String   @unique  // Telegram user ID (numeric string)
-  telegramUsername String?         // @username (optional)
-  firstName     String?            // Telegram first name
-  
-  // Linked PrivatePay user
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Status
-  isActive      Boolean  @default(true)
-  
-  // Conversation state (for multi-turn chat)
-  lastAction    String?            // e.g. "select_card_topup"
-  lastActionData String?           // JSON string of context
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([telegramId])
-  @@index([userId])
-}
-
-// One-time auth tokens for linking Telegram to PrivatePay
-model TelegramAuthToken {
-  id            String   @id @default(cuid())
-  
-  token         String   @unique  // Random token in the URL
-  telegramId    String             // The Telegram user who initiated
-  
-  // Status
-  used          Boolean  @default(false)
-  expiresAt     DateTime           // 10-minute expiry
-  
-  createdAt     DateTime @default(now())
-
-  @@index([token])
-  @@index([telegramId])
-}
 
