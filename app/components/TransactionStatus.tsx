@@ -36,7 +36,9 @@ export function TransactionStatus({
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [failCount, setFailCount] = useState(0);
-  const MAX_POLL_FAILURES = 60; // Stop after ~5 min of failures
+  const [notFoundCount, setNotFoundCount] = useState(0);
+  const MAX_POLL_FAILURES = 30; // Stop after ~2.5 min of actual errors
+  const MAX_NOT_FOUND = 60; // Allow up to 5 min of 'not found yet' (Squid indexing delay)
 
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
@@ -67,6 +69,13 @@ export function TransactionStatus({
         bridgeType,
       });
 
+      // Handle 'not_found_yet' (404 from Squid, converted by our proxy)
+      if (result.squidTransactionStatus === "not_found_yet") {
+        setNotFoundCount((c) => c + 1);
+        console.log("Status: not found yet (Squid indexing...), retry", notFoundCount + 1);
+        return;
+      }
+
       if (result.squidTransactionStatus) {
         setStatus(result.squidTransactionStatus);
       }
@@ -74,10 +83,11 @@ export function TransactionStatus({
         setAxelarUrl(result.axelarTransactionUrl);
       }
       setFailCount(0); // Reset on success
+      setNotFoundCount(0); // Reset on success
     } catch {
       setFailCount((c) => c + 1);
     }
-  }, [txHash, fromChainId, toChainId, requestId, quoteId, bridgeType]);
+  }, [txHash, fromChainId, toChainId, requestId, quoteId, bridgeType, notFoundCount]);
 
   useEffect(() => {
     const isTerminal =
@@ -86,9 +96,16 @@ export function TransactionStatus({
 
     if (isTerminal) return;
 
-    // Stop polling after too many consecutive failures
+    // Stop polling after too many consecutive actual errors
     if (failCount >= MAX_POLL_FAILURES) {
-      setError("Status tracking timed out. Your swap may still complete — check the explorer link below.");
+      setError("Status tracking encountered errors. Your swap may still complete — check the explorer link below.");
+      return;
+    }
+
+    // After extended 'not found' period, show as likely complete
+    // (Squid sometimes doesn't index Solana ON_CHAIN_EXECUTION txs)
+    if (notFoundCount >= MAX_NOT_FOUND) {
+      setStatus("likely_complete");
       return;
     }
 
@@ -96,7 +113,7 @@ export function TransactionStatus({
     checkStatus(); // initial check
 
     return () => clearInterval(interval);
-  }, [status, checkStatus, failCount]);
+  }, [status, checkStatus, failCount, notFoundCount]);
 
   const isComplete = SQUID_COMPLETED_STATES.includes(status);
   const isFailed = SQUID_FAILED_STATES.includes(status);
@@ -169,10 +186,17 @@ export function TransactionStatus({
 
           <div className="flex-1">
             <p className="text-sm font-semibold text-white">
-              {isComplete ? "Bridge Complete!" : isFailed ? "Bridge Failed" : "Bridging in Progress"}
+              {isComplete 
+                ? status === "likely_complete" 
+                  ? "Swap Likely Complete!" 
+                  : "Bridge Complete!" 
+                : isFailed ? "Bridge Failed" : "Bridging in Progress"}
             </p>
             <p className="text-[11px] text-gray-500">
               {fromChain?.name} → {toChain?.name}
+              {isComplete && status === "likely_complete" && (
+                <span className="ml-1">• Check explorer to confirm</span>
+              )}
               {!isComplete && !isFailed && (
                 <span className="ml-2 text-gray-600">• {formatTime(elapsed)}</span>
               )}

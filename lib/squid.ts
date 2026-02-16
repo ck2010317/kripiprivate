@@ -141,31 +141,29 @@ export interface SquidStatusResponse {
 export async function getRoute(
   params: SquidRouteParams
 ): Promise<SquidRouteResponse> {
-  const response = await fetch(`${SQUID_API_URL}/route`, {
+  // Use our server-side proxy to reliably capture x-request-id header
+  // (CORS blocks this header when calling Squid directly from browser)
+  const response = await fetch(`/api/bridge/route`, {
     method: "POST",
-    headers: getHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(
-      errorData.error?.message ||
+      errorData.error ||
         errorData.message ||
         `Squid API Error: ${response.status} ${response.statusText}`
     );
   }
 
   const data = await response.json();
-  // x-request-id header may be blocked by CORS in browser, fallback to body
-  const requestId = response.headers.get("x-request-id") 
-    || data.requestId 
-    || data.route?.transactionRequest?.requestId 
-    || "";
+  console.log("Route response - requestId:", data.requestId, "quoteId:", data.route?.quoteId);
 
   return {
     route: data.route,
-    requestId,
+    requestId: data.requestId || "",
   };
 }
 
@@ -220,11 +218,9 @@ export async function getStatus(params: {
   if (params.quoteId) searchParams.set("quoteId", params.quoteId);
   if (params.bridgeType) searchParams.set("bridgeType", params.bridgeType);
 
+  // Use our server-side proxy which handles 404s gracefully
   const response = await fetch(
-    `${SQUID_API_URL}/status?${searchParams.toString()}`,
-    {
-      headers: getHeaders(),
-    }
+    `/api/bridge/status?${searchParams.toString()}`
   );
 
   if (!response.ok) {
@@ -239,6 +235,7 @@ export const SQUID_COMPLETED_STATES = [
   "success",
   "partial_success",
   "needs_gas",
+  "likely_complete", // Our custom state: Squid didn't index it but tx was confirmed on-chain
 ];
 
 export const SQUID_FAILED_STATES = [

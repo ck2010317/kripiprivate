@@ -468,6 +468,8 @@ export function SwapCard() {
         // For Solana ON_CHAIN_EXECUTION: use the Solana signature as transactionId for status API
         // IMPORTANT: Do NOT include bridgeType for ON_CHAIN_EXECUTION routes per Squid support
         console.log("Status tracking with signature (ON_CHAIN_EXECUTION):", signature);
+        console.log("requestId from route:", freshRoute.requestId);
+        console.log("quoteId from route:", freshRoute.route.quoteId);
 
         setActiveTx({
           hash: signature,
