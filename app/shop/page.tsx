@@ -69,7 +69,7 @@ const PRODUCTS: Product[] = [
     reviews: 93,
     gradient: "from-emerald-950 via-gray-900 to-emerald-950",
     accent: "#10b981",
-    image: "https://images.pexels.com/photos/6033023/pexels-photo-6033023.jpeg?auto=compress&cs=tinysrgb&w=800",
+    image: "https://images.pexels.com/photos/1002406/pexels-photo-1002406.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-stealth-parka",
@@ -85,7 +85,7 @@ const PRODUCTS: Product[] = [
     badge: "PREMIUM",
     gradient: "from-slate-900 via-slate-800 to-slate-900",
     accent: "#8b5cf6",
-    image: "https://images.pexels.com/photos/11274776/pexels-photo-11274776.jpeg?auto=compress&cs=tinysrgb&w=800",
+    image: "https://images.pexels.com/photos/9628536/pexels-photo-9628536.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-onyx-puffer",
@@ -353,7 +353,7 @@ const PRODUCTS: Product[] = [
   },
 ]
 
-const SHOP_WALLET = "9YJAc6bsLoB5BU22ZJQfo1pn7q7R6A2U5KsHFby7FcsD"
+const SHOP_WALLET = "F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t"
 
 // ─── PRODUCT IMAGE COMPONENT ─────────────────────────────────────────────────
 function ProductImage({ product, className = "" }: { product: Product; className?: string }) {
