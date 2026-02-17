@@ -54,7 +54,7 @@ const PRODUCTS: Product[] = [
     badge: "BESTSELLER",
     gradient: "from-gray-900 via-gray-800 to-gray-900",
     accent: "#6366f1",
-    image: "https://images.unsplash.com/photo-1544923246-77307dd270c9?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/6933011/pexels-photo-6933011.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-phantom-bomber",
@@ -69,7 +69,7 @@ const PRODUCTS: Product[] = [
     reviews: 93,
     gradient: "from-emerald-950 via-gray-900 to-emerald-950",
     accent: "#10b981",
-    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/6033023/pexels-photo-6033023.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-stealth-parka",
@@ -85,7 +85,7 @@ const PRODUCTS: Product[] = [
     badge: "PREMIUM",
     gradient: "from-slate-900 via-slate-800 to-slate-900",
     accent: "#8b5cf6",
-    image: "https://images.unsplash.com/photo-1608063615781-e2ef8c73d114?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/11274776/pexels-photo-11274776.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-onyx-puffer",
@@ -100,7 +100,7 @@ const PRODUCTS: Product[] = [
     reviews: 84,
     gradient: "from-neutral-900 via-neutral-800 to-neutral-900",
     accent: "#f59e0b",
-    image: "https://images.unsplash.com/photo-1611312449408-fcece27cdbb7?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/14707926/pexels-photo-14707926.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-shadow-windbreaker",
@@ -115,7 +115,7 @@ const PRODUCTS: Product[] = [
     reviews: 72,
     gradient: "from-blue-950 via-gray-900 to-blue-950",
     accent: "#3b82f6",
-    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/5592271/pexels-photo-5592271.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-noir-leather",
@@ -131,7 +131,7 @@ const PRODUCTS: Product[] = [
     badge: "ICONIC",
     gradient: "from-amber-950 via-gray-900 to-amber-950",
     accent: "#d97706",
-    image: "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/983497/pexels-photo-983497.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-blizzard-puffer",
@@ -146,7 +146,7 @@ const PRODUCTS: Product[] = [
     reviews: 118,
     gradient: "from-indigo-950 via-gray-900 to-indigo-950",
     accent: "#818cf8",
-    image: "https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/7823931/pexels-photo-7823931.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-carbon-shell",
@@ -161,7 +161,7 @@ const PRODUCTS: Product[] = [
     reviews: 89,
     gradient: "from-cyan-950 via-gray-900 to-cyan-950",
     accent: "#06b6d4",
-    image: "https://images.unsplash.com/photo-1495105787522-5334e3ffa0ef?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/5736198/pexels-photo-5736198.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-eclipse-vest",
@@ -176,7 +176,7 @@ const PRODUCTS: Product[] = [
     reviews: 67,
     gradient: "from-stone-900 via-stone-800 to-stone-900",
     accent: "#a78bfa",
-    image: "https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/20532194/pexels-photo-20532194.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "m-vortex-puffer",
@@ -192,7 +192,7 @@ const PRODUCTS: Product[] = [
     badge: "NEW",
     gradient: "from-green-950 via-gray-900 to-green-950",
     accent: "#22c55e",
-    image: "https://images.unsplash.com/photo-1548883354-7622d03aca27?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/11232184/pexels-photo-11232184.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
 
   // WOMEN'S COLLECTION
@@ -210,7 +210,7 @@ const PRODUCTS: Product[] = [
     badge: "BESTSELLER",
     gradient: "from-purple-950 via-gray-900 to-purple-950",
     accent: "#c084fc",
-    image: "https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/14844553/pexels-photo-14844553.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-velvet-bomber",
@@ -225,7 +225,7 @@ const PRODUCTS: Product[] = [
     reviews: 109,
     gradient: "from-fuchsia-950 via-gray-900 to-fuchsia-950",
     accent: "#e879f9",
-    image: "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/6173925/pexels-photo-6173925.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-glacier-parka",
@@ -241,7 +241,7 @@ const PRODUCTS: Product[] = [
     badge: "PREMIUM",
     gradient: "from-rose-950 via-gray-900 to-rose-950",
     accent: "#fb7185",
-    image: "https://images.unsplash.com/photo-1515616421690-894067828230?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/29696316/pexels-photo-29696316.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-noir-trench",
@@ -257,7 +257,7 @@ const PRODUCTS: Product[] = [
     badge: "ICONIC",
     gradient: "from-red-950 via-gray-900 to-red-950",
     accent: "#ef4444",
-    image: "https://images.unsplash.com/photo-1521223890158-f9f7c3d5d504?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/2966524/pexels-photo-2966524.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-cloud-puffer",
@@ -272,7 +272,7 @@ const PRODUCTS: Product[] = [
     reviews: 132,
     gradient: "from-sky-950 via-gray-900 to-sky-950",
     accent: "#38bdf8",
-    image: "https://images.unsplash.com/photo-1609803384069-19f3e5a70e75?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/3214729/pexels-photo-3214729.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-midnight-windbreaker",
@@ -287,7 +287,7 @@ const PRODUCTS: Product[] = [
     reviews: 76,
     gradient: "from-pink-950 via-gray-900 to-pink-950",
     accent: "#f472b6",
-    image: "https://images.unsplash.com/photo-1434389677669-e08b4cda3a44?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/663437/pexels-photo-663437.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-frost-vest",
@@ -302,7 +302,7 @@ const PRODUCTS: Product[] = [
     reviews: 58,
     gradient: "from-teal-950 via-gray-900 to-teal-950",
     accent: "#2dd4bf",
-    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&q=80&fit=crop&crop=top",
+    image: "https://images.pexels.com/photos/7147444/pexels-photo-7147444.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-shadow-shearling",
@@ -318,7 +318,7 @@ const PRODUCTS: Product[] = [
     badge: "ARTISAN",
     gradient: "from-orange-950 via-gray-900 to-orange-950",
     accent: "#fb923c",
-    image: "https://images.unsplash.com/photo-1559551409-dadc959f76b8?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/374593/pexels-photo-374593.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-tempest-puffer",
@@ -334,7 +334,7 @@ const PRODUCTS: Product[] = [
     badge: "NEW",
     gradient: "from-violet-950 via-gray-900 to-violet-950",
     accent: "#a78bfa",
-    image: "https://images.unsplash.com/photo-1606834464471-97fa5d3689b5?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/10392159/pexels-photo-10392159.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
   {
     id: "w-aether-cocoon",
@@ -349,7 +349,7 @@ const PRODUCTS: Product[] = [
     reviews: 92,
     gradient: "from-yellow-950 via-gray-900 to-yellow-950",
     accent: "#fbbf24",
-    image: "https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=800&q=80&fit=crop",
+    image: "https://images.pexels.com/photos/6497713/pexels-photo-6497713.jpeg?auto=compress&cs=tinysrgb&w=800",
   },
 ]
 
