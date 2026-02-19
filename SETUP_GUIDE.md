@@ -28,7 +28,7 @@ DATABASE_URL=postgresql://username:password@host:5432/database_name
 JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters
 
 # KripiCard API
-KRIPICARD_API_KEY=2b1f645315fb1950339e89b2be619a42321f49f1
+KRIPICARD_API_KEY=your-kripicard-api-key-here
 
 # Solana (for payment processing)
 MASTER_WALLET_PRIVATE_KEY=<your-base64-encoded-private-key>

@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js"
 
 // Helius Mainnet RPC (token is on mainnet - pump.fun token)
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=f3417b56-61ad-4ba8-b0f9-3695ea859a58"
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://mainnet.helius-rpc.com"
 
 // Required token for card issuance
 export const REQUIRED_TOKEN_MINT = "DrnF17MbiKXu7gVyfL13UydVvhFTSM7DDWN3Ui8npump"

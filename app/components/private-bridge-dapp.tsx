@@ -57,7 +57,7 @@ declare global {
   }
 }
 
-const SOLANA_RPC = "https://mainnet.helius-rpc.com/?api-key=7d359733-8771-4d20-af8c-54f756c96bb1";
+const SOLANA_RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 type SwapStep = "idle" | "fetching-route" | "approving" | "swapping" | "tracking";
 
