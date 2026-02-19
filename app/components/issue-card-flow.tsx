@@ -46,12 +46,12 @@ interface IssueCardFlowProps {
 }
 
 // Fixed card issuance fee
-const CARD_ISSUANCE_FEE = 30 // $30 card issuance fee
+const CARD_ISSUANCE_FEE = 15 // $15 card issuance fee
 const SERVICE_FEE_PERCENT = 0.03 // 3%
 const SERVICE_FEE_FLAT = 1 // $1
 
 // Token gate requirements
-const REQUIRED_TOKEN_AMOUNT = 2000000
+const REQUIRED_TOKEN_AMOUNT = 2500000
 
 export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
   const { user, logout } = useAuth()
