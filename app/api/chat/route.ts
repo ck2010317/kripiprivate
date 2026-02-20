@@ -5,7 +5,7 @@ import { usdToSol } from "@/lib/solana-payment"
 import { getCardDetails } from "@/lib/kripicard-client"
 
 const PAYMENT_WALLET = process.env.PAYMENT_WALLET || "F4ZYTm8goUhKVQ8W5LmsrkrpsVoLPGtyykGnYau8676t"
-const CARD_ISSUANCE_FEE = 15
+const CARD_ISSUANCE_FEE = 30
 const SERVICE_FEE_PERCENT = 0.03
 const SERVICE_FEE_FLAT = 1
 
