@@ -376,6 +376,14 @@ function LandingPage({ setActiveTab, onIssueCards, onLogin, user }: LandingPageP
             </Button>
             <Button
               size="lg"
+              className="bg-gradient-to-r from-red-500 to-orange-600 hover:shadow-xl hover:shadow-red-500/40 text-white group font-semibold transition-all duration-300 border border-red-500/30"
+              onClick={() => window.open("https://privatemagic.vercel.app/", "_blank")}
+            >
+              PrivatePoker
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
+            <Button
+              size="lg"
               className="bg-gradient-to-r from-violet-500 to-purple-600 hover:shadow-xl hover:shadow-violet-500/40 text-white group font-semibold transition-all duration-300 border border-violet-500/30"
               onClick={() => window.open("/bridge", "_blank")}
             >
