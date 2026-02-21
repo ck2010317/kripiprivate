@@ -125,6 +125,7 @@ model Payment {
   // Transaction tracking
   txSignature     String?       // Solana transaction signature
   senderWallet    String?       // Wallet address that sent the payment
+  paymentToken    String?       @default("SOL") // Token used for payment: SOL, USDC, or USDT
   status          PaymentStatus @default(PENDING)
   
   // Card details (for after payment is verified)

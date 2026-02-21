@@ -38,6 +38,7 @@ interface PaymentRequest {
   paymentWallet: string
   expiresAt: string
   status: string
+  paymentToken?: string
 }
 
 interface IssueCardFlowProps {
@@ -58,6 +59,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
   const [step, setStep] = useState<"form" | "payment" | "verifying" | "processing" | "success">("form")
   const [topupAmount, setTopupAmount] = useState("10") // Minimum $10 (KripiCard minimum)
   const [nameOnCard, setNameOnCard] = useState(user?.name || "")
+  const [paymentToken, setPaymentToken] = useState<"SOL" | "USDC" | "USDT">("SOL")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [issuedCard, setIssuedCard] = useState<IssuedCard | null>(null)
@@ -127,6 +129,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
           serviceFee: serviceFee,
           nameOnCard: nameOnCard.trim(),
           cardType: "issue",
+          paymentToken: paymentToken,
         }),
       })
 
@@ -243,7 +246,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
           </h2>
           <p className="text-muted-foreground">
             {step === "verifying" 
-              ? "Confirming your Solana transaction..." 
+              ? "Confirming your transaction on Solana..." 
               : "Creating your virtual card..."
             }
           </p>
@@ -299,20 +302,22 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
                 <span className="text-muted-foreground">Total (Card + Fees)</span>
                 <span className="font-semibold">${payment.amountUsd.toFixed(2)} USD</span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-border">
-                <span className="text-muted-foreground">SOL Price</span>
-                <span>${payment.solPrice.toFixed(2)} USD</span>
-              </div>
+              {(payment.paymentToken || 'SOL') === 'SOL' && (
+                <div className="flex justify-between items-center py-2 border-b border-border">
+                  <span className="text-muted-foreground">SOL Price</span>
+                  <span>${payment.solPrice.toFixed(2)} USD</span>
+                </div>
+              )}
               <div className="flex justify-between items-center py-2">
                 <span className="text-muted-foreground">Amount to Pay</span>
-                <span className="font-bold text-xl text-primary">{payment.amountSol.toFixed(6)} SOL</span>
+                <span className="font-bold text-xl text-primary">{payment.amountSol.toFixed(6)} {payment.paymentToken || 'SOL'}</span>
               </div>
             </div>
           </Card>
 
           {/* Payment Wallet */}
           <Card className="mb-6 p-6 bg-gradient-to-br from-primary/10 to-secondary/5">
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Send SOL to this address:</h3>
+            <h3 className="text-sm font-medium text-muted-foreground mb-2">Send {payment.paymentToken || 'SOL'} to this address:</h3>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-background/50 border border-border">
               <code className="flex-1 text-sm font-mono break-all">{payment.paymentWallet}</code>
               <button
@@ -327,7 +332,7 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
               </button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ⚠️ Send exactly <span className="font-semibold text-primary">{payment.amountSol.toFixed(6)} SOL</span> on Solana Mainnet
+              ⚠️ Send exactly <span className="font-semibold text-primary">{payment.amountSol.toFixed(6)} {payment.paymentToken || 'SOL'}</span> on Solana Mainnet
             </p>
           </Card>
 
@@ -464,9 +469,9 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
                 <Wallet className="w-4 h-4" />
                 Payment Method
               </div>
-              <p className="font-semibold">Pay with Solana (SOL)</p>
+              <p className="font-semibold">Pay with {paymentToken} on Solana</p>
               <p className="text-xs text-muted-foreground mt-1">
-                You&apos;ll be shown a wallet address to send payment after clicking continue.
+                You&apos;ll be shown a wallet address to send {paymentToken} after clicking continue.
               </p>
             </div>
           </div>
@@ -488,6 +493,28 @@ export function IssueCardFlow({ onBack, onSuccess }: IssueCardFlowProps) {
                 placeholder="JOHN DOE"
                 className="w-full px-4 py-3 rounded-lg bg-input border border-border/50 focus:border-primary outline-none uppercase"
               />
+            </div>
+
+            {/* Payment Token Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Payment Method</label>
+              <div className="grid grid-cols-3 gap-3">
+                {(['SOL', 'USDC', 'USDT'] as const).map((token) => (
+                  <button
+                    key={token}
+                    type="button"
+                    onClick={() => setPaymentToken(token)}
+                    className={`px-4 py-3 rounded-lg font-semibold transition-all ${
+                      paymentToken === token
+                        ? 'bg-primary text-primary-foreground shadow-lg'
+                        : 'bg-card/50 border border-border hover:border-primary/50'
+                    }`}
+                  >
+                    {token}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Select your preferred payment token on Solana</p>
             </div>
 
             {/* Topup Amount - User Input */}
