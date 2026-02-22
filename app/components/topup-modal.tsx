@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Loader2, Wallet, Clock, X, Check, Copy } from "lucide-react"
 
-const TOPUP_FEE_PERCENT = 0.025 // 2.5%
+const TOPUP_FEE_PERCENT = 0.03 // 3%
 const TOPUP_FEE_FLAT = 1 // $1
 const MIN_TOPUP = 10 // $10 minimum - KripiCard requirement
 
@@ -233,7 +233,7 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">
-                      Fee (2.5% + $1):
+                      Fee (3% + $1):
                     </span>
                     <span className="font-semibold">${fee.toFixed(2)}</span>
                   </div>
