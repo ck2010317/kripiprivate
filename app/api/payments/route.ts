@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { amountUsd, nameOnCard, cardType, targetCardId, cardId, topupAmount, topupFee, cardFee, serviceFee, paymentToken } = await request.json()
+    const { amountUsd, nameOnCard, cardType, targetCardId, cardId, topupAmount, topupFee, cardFee, serviceFee } = await request.json()
 
     // Log what we're receiving
     console.log("[Payments] Creating payment with:", {
@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
       topupFee,
       cardFee,
       serviceFee,
-      paymentToken: paymentToken || 'SOL',
     })
 
     // Validate minimum amounts
@@ -83,20 +82,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get SOL conversion (or use USDC/USDT at 1:1 rate)
-    const token = paymentToken || 'SOL'
-    let tokenAmount: number
-    let tokenPrice: number
-    
-    if (token === 'SOL') {
-      const { solAmount, solPrice } = await usdToSol(amountUsd)
-      tokenAmount = solAmount
-      tokenPrice = solPrice
-    } else {
-      // USDC and USDT are 1:1 with USD
-      tokenAmount = amountUsd
-      tokenPrice = 1
-    }
+    // Get SOL conversion
+    const { solAmount, solPrice } = await usdToSol(amountUsd)
 
     // Create payment record (expires in 30 minutes)
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
@@ -107,8 +94,8 @@ export async function POST(request: NextRequest) {
     const payment = await prisma.payment.create({
       data: {
         amountUsd,
-        amountSol: tokenAmount,
-        solPriceAtTime: tokenPrice,
+        amountSol: solAmount,
+        solPriceAtTime: solPrice,
         cardType: cardType || "issue",
         nameOnCard,
         targetCardId: finalTargetCardId,
@@ -116,7 +103,6 @@ export async function POST(request: NextRequest) {
         topupFee: serviceFee || cardFee,
         userId: user.id,
         expiresAt,
-        paymentToken: token,
       },
     })
 
@@ -138,7 +124,6 @@ export async function POST(request: NextRequest) {
         paymentWallet: PAYMENT_WALLET,
         expiresAt: payment.expiresAt,
         status: payment.status,
-        paymentToken: payment.paymentToken || 'SOL',
       },
     })
   } catch (error) {

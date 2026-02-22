@@ -24,13 +24,11 @@ interface PaymentRequest {
   paymentWallet: string
   expiresAt: string
   status: string
-  paymentToken?: string
 }
 
 export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalProps) {
   const [step, setStep] = useState<"form" | "payment" | "verifying">("form")
   const [amount, setAmount] = useState("50")
-  const [paymentToken, setPaymentToken] = useState<"SOL" | "USDC" | "USDT">("SOL")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [payment, setPayment] = useState<PaymentRequest | null>(null)
@@ -102,7 +100,6 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
           topupFee: fee, // Fee charged
           cardType: "topup",
           targetCardId: cardId,
-          paymentToken: paymentToken,
         }),
       })
 
@@ -249,27 +246,6 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
                 </div>
               )}
 
-              {/* Payment Token Selection */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Payment Token</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['SOL', 'USDC', 'USDT'] as const).map((token) => (
-                    <button
-                      key={token}
-                      type="button"
-                      onClick={() => setPaymentToken(token)}
-                      className={`py-2 rounded-lg font-semibold text-sm transition-all ${
-                        paymentToken === token
-                          ? 'bg-primary text-primary-foreground shadow-lg'
-                          : 'bg-card/50 border border-border hover:border-primary/50'
-                      }`}
-                    >
-                      {token}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Quick Amounts */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Quick Amount</label>
@@ -330,7 +306,7 @@ export function TopupModal({ cardId, isOpen, onClose, onSuccess }: TopupModalPro
                     Send exactly this amount:
                   </p>
                   <p className="text-2xl font-bold text-primary">
-                    {payment.amountSol.toFixed(6)} {payment.paymentToken || 'SOL'}
+                    {payment.amountSol.toFixed(6)} SOL
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     ≈ ${payment.amountUsd.toFixed(2)} USD

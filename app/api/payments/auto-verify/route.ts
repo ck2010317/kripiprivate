@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { checkRecentPayments, verifyPayment, checkRecentSPLPayments, verifySPLPayment, getTokenMint } from "@/lib/solana-payment"
+import { checkRecentPayments, verifyPayment } from "@/lib/solana-payment"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Check for recent payments and auto-verify
@@ -61,66 +61,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Get recent transactions to our payment wallet
-    const paymentToken = payment.paymentToken || 'SOL'
-    const tokenMint = getTokenMint(paymentToken)
-    
-    let recentPayments
-    if (tokenMint) {
-      // SPL token payment (USDC/USDT)
-      recentPayments = await checkRecentSPLPayments(tokenMint)
-      console.log(`[Auto Verify] Payment ${paymentId}: looking for ${payment.amountSol} ${paymentToken} (SPL token)`)
-    } else {
-      // SOL payment
-      recentPayments = await checkRecentPayments()
-      console.log(`[Auto Verify] Payment ${paymentId}: looking for ${payment.amountSol} SOL`)
-    }
+    const recentPayments = await checkRecentPayments()
 
-    console.log(`[Auto Verify] Payment created at ${payment.createdAt.toISOString()}`)
-    console.log(`[Auto Verify] Found ${recentPayments.length} recent ${paymentToken} payments to check`)
+    console.log(`[Auto Verify] Payment ${paymentId}: looking for ${payment.amountSol} SOL (created at ${payment.createdAt.toISOString()})`)
+    console.log(`[Auto Verify] Found ${recentPayments.length} recent payments to check`)
 
     // Find a matching payment
     let matchedPayment = null
-    const isStablecoin = paymentToken === 'USDC' || paymentToken === 'USDT'
-    
     for (const recentPayment of recentPayments) {
-      // For card issuance: accept any payment >= $5 equivalent
-      // For topup/fund: use looser matching with tolerance
-      // Stablecoins are 1:1 with USD so amounts are larger (e.g. $44 USDC vs 0.2 SOL)
+      // For card issuance: accept any payment >= $5 equivalent (roughly 0.05 SOL at $100/SOL)
+      // For topup/fund: use looser matching with 70-130% tolerance for small amounts
       let amountMatch = false
       
       if (payment.cardType === "issue") {
-        if (isStablecoin) {
-          // Stablecoin card issuance - expect $30+ range, allow 90-110% tolerance
-          const minAmount = payment.amountSol * 0.90
-          const maxAmount = payment.amountSol * 1.10
-          amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
-          console.log(`[Auto Verify] Card issuance (${paymentToken}) - checking if ${recentPayment.amount} is in range [${minAmount}, ${maxAmount}]: ${amountMatch}`)
-        } else {
-          // SOL card issuance - just need at least ~$5 worth of SOL (0.05 SOL minimum)
-          amountMatch = recentPayment.amount >= 0.045 && recentPayment.amount <= 1.0 // Max 1 SOL for card
-          console.log(`[Auto Verify] Card issuance (SOL) - checking if ${recentPayment.amount} SOL is in range [0.045, 1.0]: ${amountMatch}`)
-        }
+        // Card issuance - just need at least ~$5 worth of SOL (0.05 SOL minimum)
+        amountMatch = recentPayment.amount >= 0.045 && recentPayment.amount <= 1.0 // Max 1 SOL for card
+        console.log(`[Auto Verify] Card issuance - checking if ${recentPayment.amount} SOL is in range [0.045, 1.0]: ${amountMatch}`)
       } else if (payment.cardType === "topup" || payment.cardType === "fund") {
-        if (isStablecoin) {
-          // Stablecoin topup - tighter matching since amounts are exact in USD
-          const minAmount = payment.amountSol * 0.95
-          const maxAmount = payment.amountSol * 1.05
-          amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
-          console.log(`[Auto Verify] Topup/Fund (${paymentToken}) - checking if ${recentPayment.amount} is in range [${minAmount}, ${maxAmount}] (amount=${payment.amountSol}): ${amountMatch}`)
-        } else {
-          // SOL topup - use looser matching because small amounts have more variance in SOL conversion
-          const minAmount = payment.amountSol < 0.05 ? payment.amountSol * 0.70 : payment.amountSol * 0.80
-          const maxAmount = payment.amountSol < 0.05 ? payment.amountSol * 1.30 : payment.amountSol * 1.20
-          amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
-          console.log(`[Auto Verify] Topup/Fund (SOL) - checking if ${recentPayment.amount} SOL is in range [${minAmount}, ${maxAmount}] (amountSol=${payment.amountSol}): ${amountMatch}`)
-        }
-      } else {
-        // Other payment types - use appropriate tolerance
-        const tolerance = isStablecoin ? 0.05 : 0.20
-        const minAmount = payment.amountSol * (1 - tolerance)
-        const maxAmount = payment.amountSol * (1 + tolerance)
+        // Topup/fund - use looser matching because small amounts have more variance in SOL conversion
+        // Allow 70-130% tolerance for small amounts (< 0.05 SOL), stricter 80-120% for larger
+        const minAmount = payment.amountSol < 0.05 ? payment.amountSol * 0.70 : payment.amountSol * 0.80
+        const maxAmount = payment.amountSol < 0.05 ? payment.amountSol * 1.30 : payment.amountSol * 1.20
         amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
-        console.log(`[Auto Verify] Other payment (${paymentToken}) - checking if ${recentPayment.amount} is in range [${minAmount}, ${maxAmount}]: ${amountMatch}`)
+        console.log(`[Auto Verify] Topup/Fund - checking if ${recentPayment.amount} SOL is in range [${minAmount}, ${maxAmount}] (amountSol=${payment.amountSol}): ${amountMatch}`)
+      } else {
+        // Other payment types - stricter matching
+        const minAmount = payment.amountSol * 0.80
+        const maxAmount = payment.amountSol * 1.20
+        amountMatch = recentPayment.amount >= minAmount && recentPayment.amount <= maxAmount
+        console.log(`[Auto Verify] Other payment - checking if ${recentPayment.amount} SOL is in range [${minAmount}, ${maxAmount}]: ${amountMatch}`)
       }
 
       if (amountMatch) {
@@ -170,12 +139,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the transaction
-    let verificationResult
-    if (tokenMint) {
-      verificationResult = await verifySPLPayment(matchedPayment.signature, payment.amountSol, tokenMint)
-    } else {
-      verificationResult = await verifyPayment(matchedPayment.signature, payment.amountSol)
-    }
+    const verificationResult = await verifyPayment(
+      matchedPayment.signature,
+      payment.amountSol
+    )
 
     if (!verificationResult.verified) {
       return NextResponse.json(

@@ -30,5 +30,3 @@ next-env.d.ts
 
 /lib/generated/prisma
 .agent-hackathon.json
-VERCEL_ENV_SETUP.md
-X_POST_SHOP_LAUNCH.md

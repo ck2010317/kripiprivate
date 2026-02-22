@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { verifyPayment, verifySPLPayment, getTokenMint } from "@/lib/solana-payment"
+import { verifyPayment } from "@/lib/solana-payment"
 import { createCard as createKripiCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
@@ -69,8 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Verify By Signature] Payment ${paymentId}: verifying ${txSignature}`)
-    const paymentToken = payment.paymentToken || 'SOL'
-    console.log(`[Verify By Signature] Expected amount: ${payment.amountSol} ${paymentToken}`)
+    console.log(`[Verify By Signature] Expected amount: ${payment.amountSol} SOL`)
 
     // Update status to confirming
     await prisma.payment.update({
@@ -81,16 +80,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Verify the transaction - branch based on payment token type
-    const tokenMint = getTokenMint(paymentToken)
-    let verification
-    if (tokenMint) {
-      // SPL token verification (USDC/USDT)
-      verification = await verifySPLPayment(txSignature, payment.amountSol, tokenMint)
-    } else {
-      // SOL verification
-      verification = await verifyPayment(txSignature, payment.amountSol)
-    }
+    // Verify the transaction - don't pass expected wallet, let it auto-detect
+    const verification = await verifyPayment(txSignature, payment.amountSol)
 
     if (!verification.verified) {
       console.log(`[Verify By Signature] ❌ Verification failed: ${verification.error}`)
