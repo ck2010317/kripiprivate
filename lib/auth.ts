@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { prisma } from "./prisma"
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -59,9 +59,24 @@ export async function removeAuthCookie() {
   cookieStore.delete(COOKIE_NAME)
 }
 
-// Get current user from cookie
+// Get current user from cookie or Authorization header
 export async function getCurrentUser() {
-  const token = await getAuthCookie()
+  // Try cookie first
+  let token = await getAuthCookie()
+  
+  // Fallback to Authorization header (for contexts where cookies don't work, e.g. iframes)
+  if (!token) {
+    try {
+      const headerStore = await headers()
+      const authHeader = headerStore.get("authorization")
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.slice(7)
+      }
+    } catch {
+      // headers() may not be available in all contexts
+    }
+  }
+
   if (!token) return null
 
   const payload = await verifyToken(token)

@@ -12,10 +12,12 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
+  token: string | null
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signup: (email: string, password: string, name: string, referralCode?: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
+  authFetch: (url: string, options?: RequestInit) => Promise<Response>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -23,12 +25,41 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(null)
+
+  // Helper: fetch with auth token in Authorization header as fallback
+  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    const currentToken = token || (typeof window !== "undefined" ? localStorage.getItem("auth_token") : null)
+    const headers = new Headers(options.headers || {})
+    if (currentToken) {
+      headers.set("Authorization", `Bearer ${currentToken}`)
+    }
+    return fetch(url, {
+      ...options,
+      headers,
+      credentials: "include",
+    })
+  }, [token])
 
   const refreshUser = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/me")
+      const currentToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      const headers: Record<string, string> = {}
+      if (currentToken) {
+        headers["Authorization"] = `Bearer ${currentToken}`
+      }
+      const response = await fetch("/api/auth/me", { 
+        credentials: "include",
+        headers,
+      })
       const data = await response.json()
-      setUser(data.user || null)
+      if (data.user) {
+        setUser(data.user)
+        // If we got a user, keep the stored token
+      } else if (!currentToken) {
+        // Only clear user if we also don't have a token
+        setUser(null)
+      }
     } catch {
       setUser(null)
     } finally {
@@ -37,6 +68,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // On mount, try to restore token from localStorage
+    const storedToken = localStorage.getItem("auth_token")
+    if (storedToken) {
+      setToken(storedToken)
+    }
     refreshUser()
   }, [refreshUser])
 
@@ -45,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
 
@@ -55,8 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(data.user)
-      // Refresh user to ensure cookie is set and state is synced
-      await refreshUser()
+      // Store token for Authorization header fallback
+      if (data.token) {
+        setToken(data.token)
+        localStorage.setItem("auth_token", data.token)
+      }
       return { success: true }
     } catch {
       return { success: false, error: "Network error. Please try again." }
@@ -68,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password, name, referralCode }),
       })
 
@@ -78,8 +119,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(data.user)
-      // Refresh user to ensure cookie is set and state is synced
-      await refreshUser()
+      // Store token for Authorization header fallback
+      if (data.token) {
+        setToken(data.token)
+        localStorage.setItem("auth_token", data.token)
+      }
       return { success: true }
     } catch {
       return { success: false, error: "Network error. Please try again." }
@@ -88,14 +132,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" })
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
     } finally {
       setUser(null)
+      setToken(null)
+      localStorage.removeItem("auth_token")
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, token, login, signup, logout, refreshUser, authFetch }}>
       {children}
     </AuthContext.Provider>
   )
