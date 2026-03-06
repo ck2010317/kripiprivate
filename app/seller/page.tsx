@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SellerOnboarding } from '@/app/components/seller-onboarding'
+import { SellerManagement } from '@/app/components/seller-management'
 import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 interface Store {
   id: string
@@ -76,16 +79,30 @@ export default function SellerDashboard() {
     )
   }
 
-  // User has a store - redirect to store management
+  // User has a store - show management dashboard
   if (store) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Welcome to {store.name}
-          </h1>
-          <p className="text-gray-600 mt-2">Redirecting to your store dashboard...</p>
-          {/* You can add store management UI here */}
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {store.name} - Seller Dashboard
+                </h1>
+                <p className="text-gray-600 mt-1">{store.description}</p>
+              </div>
+              <Link href={`/store/${store.slug}`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  View Store
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Management Dashboard */}
+          <SellerManagement storeId={store.id} />
         </div>
       </div>
     )
