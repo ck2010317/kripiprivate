@@ -3,10 +3,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.privatepay.app',
   appName: 'PrivatePay',
-  // Point to your live Vercel deployment — /mobile route
+  webDir: 'out',
   server: {
-    url: 'https://privatepay.site/mobile',
-    cleartext: true,
+    androidScheme: 'https',
   },
   plugins: {
     StatusBar: {

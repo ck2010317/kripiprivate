@@ -30,3 +30,8 @@ next-env.d.ts
 
 /lib/generated/prisma
 .agent-hackathon.json
+
+# Android signing
+android/keystore.properties
+*.jks
+*.keystore

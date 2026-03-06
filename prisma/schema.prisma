@@ -34,6 +34,11 @@ model User {
   payments      Payment[]
   apiKeys       ApiKey[]
   referralLogs  ReferralLog[]  // Logs of referral rewards earned
+  
+  // Multi-vendor marketplace
+  store         Store?         // User's store (one store per user)
+  marketplaceOrders MarketplaceOrder[] // Orders where user is buyer
+  vendorPayouts VendorPayout[]  // Payouts for vendor
 }
 
 model ReferralLog {
@@ -367,5 +372,235 @@ model ApiCard {
   @@index([apiKeyId])
   @@index([externalId])
 }
+
+// ============================================
+// Multi-Vendor Marketplace Models
+// ============================================
+
+model Store {
+  id              String    @id @default(cuid())
+  
+  // Store info
+  name            String
+  slug            String    @unique  // URL-friendly store name
+  description     String?
+  image           String?   // Store logo/banner
+  
+  // Owner
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Wallet for receiving payments
+  solWallet       String?   // Solana wallet address for payouts
+  
+  // Store stats
+  totalSales      Float     @default(0)   // Total revenue in USD
+  totalOrders     Int       @default(0)   // Number of orders
+  rating          Float     @default(0)   // Average rating (0-5)
+  reviewCount     Int       @default(0)
+  
+  // Status
+  isActive        Boolean   @default(true)
+  isVerified      Boolean   @default(false)
+  
+  // Relations
+  products        StoreProduct[]
+  orderItems      MarketplaceOrderItem[]
+  reviews         StoreReview[]
+  payouts         VendorPayout[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([userId])
+  @@index([isActive])
+}
+
+model StoreProduct {
+  id              String    @id @default(cuid())
+  
+  // Store ownership
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Product details
+  name            String
+  description     String
+  price           Float     // Price in USD
+  image           String?   // Product image URL
+  
+  // Inventory
+  stock           Int       @default(0)
+  sku             String?   // Stock keeping unit
+  
+  // Categorization
+  category        String    @default("other")
+  tags            String?   // Comma-separated tags
+  
+  // Product stats
+  soldCount       Int       @default(0)   // Total units sold
+  rating          Float     @default(0)   // Average rating
+  reviewCount     Int       @default(0)
+  
+  // Status
+  isActive        Boolean   @default(true)
+  
+  // Relations
+  orderItems      MarketplaceOrderItem[]
+  reviews         ProductReview[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([category])
+  @@index([isActive])
+}
+
+model MarketplaceOrder {
+  id              String    @id @default(cuid())
+  
+  // Buyer info
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Order details
+  totalAmount     Float     // Total price in USD
+  totalSol        Float     // Amount in SOL to pay
+  solPriceAtTime  Float     // SOL/USD price at order time
+  
+  // Shipping info
+  shippingName    String
+  shippingEmail   String
+  shippingAddress String
+  
+  // Payment info
+  status          MarketplaceOrderStatus @default(PENDING)
+  txSignature     String?   // Solana transaction signature
+  paidAt          DateTime?
+  
+  // Relations
+  items           MarketplaceOrderItem[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([txSignature])
+}
+
+enum MarketplaceOrderStatus {
+  PENDING        // Waiting for payment
+  PAID           // Payment received
+  PROCESSING     // Being prepared
+  SHIPPED        // On the way
+  DELIVERED      // Delivered
+  CANCELLED      // Cancelled
+  REFUNDED       // Refunded
+}
+
+model MarketplaceOrderItem {
+  id              String    @id @default(cuid())
+  
+  // Order reference
+  orderId         String
+  order           MarketplaceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Product reference
+  productId       String
+  product         StoreProduct @relation(fields: [productId], references: [id])
+  
+  // Item details
+  quantity        Int
+  priceAtPurchase Float     // Price per unit at time of purchase
+  subtotal        Float     // quantity * priceAtPurchase
+  
+  // Vendor info (denormalized for easier queries)
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id])
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([storeId])
+}
+
+model StoreReview {
+  id              String    @id @default(cuid())
+  
+  // Store being reviewed
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Reviewer
+  buyerId         String
+  
+  // Review content
+  rating          Int       // 1-5 stars
+  comment         String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([storeId])
+  @@unique([storeId, buyerId])
+}
+
+model ProductReview {
+  id              String    @id @default(cuid())
+  
+  // Product being reviewed
+  productId       String
+  product         StoreProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  // Reviewer
+  buyerId         String
+  
+  // Review content
+  rating          Int       // 1-5 stars
+  comment         String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([productId])
+  @@unique([productId, buyerId])
+}
+
+model VendorPayout {
+  id              String    @id @default(cuid())
+  
+  // Vendor info
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Payout details
+  amount          Float     // Amount in USD to pay out
+  amountSol       Float     // Amount in SOL
+  solPriceAtTime  Float     // SOL/USD price at payout time
+  
+  // Status
+  status          PayoutStatus @default(PENDING)
+  txSignature     String?   // Solana transaction signature
+  
+  createdAt       DateTime  @default(now())
+  paidAt          DateTime?
+
+  @@index([storeId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum PayoutStatus {
+  PENDING         // Awaiting payout processing
+  PROCESSING      // Being sent
+  PAID            // Successfully paid
+  FAILED          // Failed to send
+}
+
 
 
