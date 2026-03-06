@@ -722,7 +722,7 @@ export default function PrivateShop() {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="/seller"
+              href="/shop/seller"
               className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors"
             >
               Sell Here
