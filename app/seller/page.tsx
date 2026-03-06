@@ -29,8 +29,20 @@ export default function SellerPage() {
   useEffect(() => {
     const fetchUserStore = async () => {
       try {
-        const response = await fetch('/api/marketplace/stores/my-store')
+        const response = await fetch('/api/marketplace/stores/my-store', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
         
+        if (response.status === 401) {
+          // Not logged in
+          setStore(null)
+          setLoading(false)
+          return
+        }
+
         if (response.status === 404) {
           // No store yet, show onboarding
           setStore(null)
@@ -45,6 +57,7 @@ export default function SellerPage() {
         const data = await response.json()
         setStore(data.store)
       } catch (err) {
+        console.error('Fetch error:', err)
         setError(err instanceof Error ? err.message : 'Something went wrong')
       } finally {
         setLoading(false)
