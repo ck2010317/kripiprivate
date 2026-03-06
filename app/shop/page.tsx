@@ -886,7 +886,7 @@ export default function PrivateShop() {
               Get paid in SOL instantly. No KYC. No fees. 100% yours.
             </p>
             <a
-              href="/seller"
+              href="/shop/seller"
               className="inline-block px-8 py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground font-bold hover:shadow-xl hover:shadow-primary/30 transition-all text-lg"
             >
               Create Your Store Now
@@ -985,7 +985,7 @@ export default function PrivateShop() {
           <div className="text-center mt-12">
             <p className="text-muted-foreground mb-6">Ready to start selling?</p>
             <a
-              href="/seller"
+              href="/shop/seller"
               className="inline-block px-8 py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground font-bold hover:shadow-xl hover:shadow-primary/30 transition-all text-lg"
             >
               Launch Your Store Today

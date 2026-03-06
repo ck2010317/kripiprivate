@@ -111,7 +111,7 @@ export function SellerOnboarding() {
 
       // Redirect to store dashboard after 2 seconds
       setTimeout(() => {
-        router.push(`/seller/${data.store.slug}`)
+        router.push(`/shop/seller/${data.store.slug}`)
       }, 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')

@@ -20,7 +20,7 @@ export function MainNavigation() {
             Browse
           </Link>
           
-          <Link href="/seller">
+          <Link href="/shop/seller">
             <Button className="bg-blue-600 hover:bg-blue-700 gap-2">
               <Store className="w-4 h-4" />
               Become a Seller
