@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SellerOnboarding } from '@/app/components/seller-onboarding'
-import { SellerManagement } from '@/app/components/seller-management'
+import { SellerDashboard } from '@/app/components/seller-management'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -20,7 +20,7 @@ interface Store {
   productCount: number
 }
 
-export default function SellerDashboard() {
+export default function SellerPage() {
   const router = useRouter()
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,7 +102,7 @@ export default function SellerDashboard() {
           </div>
 
           {/* Management Dashboard */}
-          <SellerManagement storeId={store.id} />
+          <SellerDashboard storeId={store.id} />
         </div>
       </div>
     )
