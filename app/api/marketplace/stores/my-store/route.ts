@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser()
 
     if (!user) {
+      // Not authenticated - return 401 to indicate user needs to login
       return NextResponse.json(
         { error: "Unauthorized. Please login first." },
         { status: 401 }
@@ -16,29 +17,12 @@ export async function GET(request: NextRequest) {
 
     const store = await prisma.store.findUnique({
       where: { userId: user.id },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        image: true,
-        solWallet: true,
-        totalSales: true,
-        totalOrders: true,
-        rating: true,
-        reviewCount: true,
-        isActive: true,
-        isVerified: true,
-        createdAt: true,
-        _count: {
-          select: { products: true, reviews: true },
-        },
-      },
     })
 
     if (!store) {
+      // User is authenticated but has no store - return 404
       return NextResponse.json(
-        { error: "Store not found" },
+        { error: "No store found" },
         { status: 404 }
       )
     }
@@ -46,9 +30,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       store: {
-        ...store,
-        productCount: store._count.products,
-        reviewCount: store._count.reviews,
+        id: store.id,
+        name: store.name,
+        slug: store.slug,
+        description: store.description,
+        image: store.image,
+        solWallet: store.solWallet,
+        totalSales: store.totalSales,
+        totalOrders: store.totalOrders,
+        rating: store.rating,
+        reviewCount: store.reviewCount,
+        isActive: store.isActive,
+        isVerified: store.isVerified,
+        createdAt: store.createdAt,
       },
     })
   } catch (error) {

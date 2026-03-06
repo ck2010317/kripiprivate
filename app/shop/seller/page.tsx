@@ -29,14 +29,19 @@ export default function SellerPage() {
   useEffect(() => {
     const fetchUserStore = async () => {
       try {
+        console.log('Fetching user store...')
         const response = await fetch('/api/marketplace/stores/my-store', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
+          cache: 'no-store',
         })
         
+        console.log('Response status:', response.status)
+
         if (response.status === 401) {
+          console.log('User not authenticated')
           // Not logged in
           setStore(null)
           setLoading(false)
@@ -44,6 +49,7 @@ export default function SellerPage() {
         }
 
         if (response.status === 404) {
+          console.log('No store found for user')
           // No store yet, show onboarding
           setStore(null)
           setLoading(false)
@@ -51,13 +57,17 @@ export default function SellerPage() {
         }
 
         if (!response.ok) {
-          throw new Error('Failed to fetch store')
+          console.error('API response not OK:', response.status, response.statusText)
+          throw new Error(`API error: ${response.status}`)
         }
 
         const data = await response.json()
+        console.log('Store data:', data)
         setStore(data.store)
       } catch (err) {
         console.error('Fetch error:', err)
+        // If there's an error, show onboarding (not logged in or no store)
+        setStore(null)
         setError(err instanceof Error ? err.message : 'Something went wrong')
       } finally {
         setLoading(false)
@@ -79,14 +89,11 @@ export default function SellerPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Error</h1>
-          <p className="text-gray-600 mt-2">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Try Again
-          </button>
+          <h1 className="text-2xl font-bold text-gray-900">Loading...</h1>
+          <p className="text-gray-600 mt-2">If you see this, please log in first or create an account</p>
+          <a href="/" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Go Home
+          </a>
         </div>
       </div>
     )
