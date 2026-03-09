@@ -420,8 +420,23 @@ export async function getCardDetails(last4: string): Promise<CardDetailsResponse
     throw new Error(`Failed to get card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
   }
 
-  if (!response.ok || !data.success) {
+  if (!response.ok || (!data.success && !data.status)) {
     throw new Error(data.message || "Failed to get card details")
+  }
+
+  // Normalize response format - regular endpoint returns {status, card: {...}, currentBalance}
+  // Premium endpoint returns flat {success, card_number, ...}
+  if (data.card && data.status === true) {
+    return {
+      success: true,
+      card_id: data.card.card_id,
+      card_number: data.card.card_number,
+      expiry_date: data.card.expiry_date,
+      cvv: data.card.cvv,
+      balance: data.currentBalance ?? parseFloat(data.card.amount) ?? 0,
+      status: data.card.status || "ACTIVE",
+      name_on_card: data.card.name_on_card,
+    } as CardDetailsResponse
   }
 
   // Return the response as-is
