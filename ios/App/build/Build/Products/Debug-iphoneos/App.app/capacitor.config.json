@@ -1,0 +1,33 @@
+{
+	"appId": "com.privatepay.app",
+	"appName": "PrivatePay",
+	"webDir": "out",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"StatusBar": {
+			"style": "Dark",
+			"backgroundColor": "#0d0b18"
+		},
+		"SplashScreen": {
+			"launchShowDuration": 2000,
+			"backgroundColor": "#0d0b18",
+			"showSpinner": true,
+			"spinnerColor": "#8b5cf6"
+		}
+	},
+	"ios": {
+		"contentInset": "automatic",
+		"preferredContentMode": "mobile",
+		"scheme": "PrivatePay"
+	},
+	"android": {
+		"backgroundColor": "#0d0b18",
+		"allowMixedContent": true
+	},
+	"packageClassList": [
+		"SplashScreenPlugin",
+		"StatusBarPlugin"
+	]
+}

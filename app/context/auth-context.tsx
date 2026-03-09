@@ -26,10 +26,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/me")
+      // AbortController with 4-second timeout prevents infinite loading
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 4000)
+
+      const response = await fetch("/api/auth/me", {
+        signal: controller.signal,
+        credentials: "include",
+      })
+      clearTimeout(timeoutId)
+
       const data = await response.json()
       setUser(data.user || null)
     } catch {
+      // Network error, timeout, or abort — just set user to null
       setUser(null)
     } finally {
       setLoading(false)

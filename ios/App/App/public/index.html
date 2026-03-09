@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0b18">
+<title>PrivatePay</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { 
+  height: 100%; width: 100%; margin: 0; padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0d0b18; color: white;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+input, button { font-family: inherit; }
+button { cursor: pointer; border: none; background: none; }
+
+/* Screen management */
+.screen { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 1; }
+.screen.active { display: block; }
+.screen::-webkit-scrollbar { display: none; }
+.screen { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Glow orbs */
+.glow-purple { position: absolute; border-radius: 9999px; filter: blur(48px); pointer-events: none; background: rgba(139,92,246,0.12); }
+.glow-blue { position: absolute; border-radius: 9999px; filter: blur(48px); pointer-events: none; background: rgba(59,130,246,0.10); }
+
+/* Inputs */
+.m-input {
+  width: 100%; padding: 14px 16px; border-radius: 12px;
+  background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.18);
+  color: white; font-size: 15px; outline: none;
+  transition: all 0.2s ease; -webkit-appearance: none; appearance: none;
+}
+.m-input::placeholder { color: rgba(167,139,250,0.35); }
+.m-input:focus { border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.12); box-shadow: 0 0 0 3px rgba(139,92,246,0.12); }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Primary button */
+.btn-primary {
+  width: 100%; padding: 15px 24px; border-radius: 12px;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: white; font-weight: 600; font-size: 15px;
+  border: 1px solid rgba(139,92,246,0.4);
+  box-shadow: 0 8px 32px rgba(139,92,246,0.25), 0 0 0 1px rgba(139,92,246,0.1);
+  transition: all 0.15s ease;
+}
+.btn-primary:active { transform: scale(0.98); opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; pointer-events: none; }
+
+/* Glass card */
+.glass { background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.14); border-radius: 12px; }
+.glass-2x { background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.18); border-radius: 16px; }
+
+/* Header bar */
+.app-header {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(17,15,31,0.85); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(139,92,246,0.12);
+  padding: 0 16px 14px; display: flex; align-items: center; justify-content: space-between;
+  padding-top: max(54px, env(safe-area-inset-top, 54px));
+}
+
+/* Animations */
+@keyframes fadeIn { from { opacity:0; transform: scale(0.96) translateY(8px); } to { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-fade { animation: fadeIn 0.5s cubic-bezier(0.16,1,0.3,1); }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+.animate-spin { animation: spin 1s linear infinite; }
+
+/* Status colors */
+.status-active { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); color: #34d399; }
+.status-frozen { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); color: #60a5fa; }
+.status-cancelled { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #f87171; }
+.status-pending { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); color: #fbbf24; }
+
+/* Error box */
+.error-box { padding: 12px; border-radius: 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #f87171; font-size: 14px; margin-bottom: 16px; }
+
+/* Topup modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-content { width: 100%; max-width: 400px; background: #110f1f; border: 1px solid rgba(139,92,246,0.2); border-radius: 16px; max-height: 90vh; overflow-y: auto; }
+
+/* Utility */
+.flex { display: flex; } .flex-col { flex-direction: column; } .items-center { align-items: center; } .justify-center { justify-content: center; } .justify-between { justify-content: space-between; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+.text-center { text-align: center; } .text-right { text-align: right; }
+.w-full { width: 100%; } .relative { position: relative; } .z-10 { z-index: 10; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-mono { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; }
+.break-all { word-break: break-all; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ===== SPLASH SCREEN ===== -->
+<div id="screen-splash" class="screen active">
+  <div style="min-height:100dvh; display:flex; align-items:center; justify-content:center; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:384px; height:384px; top:-128px; right:-128px;"></div>
+    <div class="glow-blue" style="width:320px; height:320px; bottom:-160px; left:-160px;"></div>
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(139,92,246,0.08) 0%, transparent 70%);"></div>
+    <div class="animate-fade" style="text-align:center; position:relative; z-index:10;">
+      <div style="position:relative; width:112px; height:112px; margin:0 auto 32px;">
+        <div class="animate-pulse" style="position:absolute; inset:0; background:rgba(139,92,246,0.25); border-radius:24px; filter:blur(16px);"></div>
+        <div class="animate-pulse" style="position:absolute; inset:-4px; border-radius:24px; background:linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.2)); animation-duration:3s;"></div>
+        <div style="position:relative; width:112px; height:112px; border-radius:24px; background:linear-gradient(135deg, rgba(124,58,237,0.3), #0f0d1a, rgba(37,99,235,0.2)); border:1px solid rgba(139,92,246,0.3); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(24px); box-shadow:0 25px 50px rgba(139,92,246,0.2);">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="rgb(196,181,253)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+      </div>
+      <h1 style="font-size:36px; font-weight:700; color:white; letter-spacing:-0.5px; margin-bottom:8px;">PrivatePay</h1>
+      <p style="font-size:14px; color:rgba(196,181,253,0.65); letter-spacing:1px;">Payment Infrastructure</p>
+      <div style="margin-top:40px; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <div class="animate-pulse" style="width:8px; height:8px; border-radius:50%; background:rgba(167,139,250,0.6);"></div>
+        <div class="animate-pulse" style="width:8px; height:8px; border-radius:50%; background:rgba(167,139,250,0.6); animation-delay:200ms;"></div>
+        <div class="animate-pulse" style="width:8px; height:8px; border-radius:50%; background:rgba(167,139,250,0.6); animation-delay:400ms;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AUTH SCREEN ===== -->
+<div id="screen-auth" class="screen">
+  <div style="min-height:100dvh; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:320px; height:320px; top:-96px; right:-60px;"></div>
+    <div class="glow-blue" style="width:288px; height:288px; bottom:40px; left:-96px;"></div>
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse at top right, rgba(139,92,246,0.06) 0%, transparent 60%);"></div>
+    <div style="position:relative; z-index:10;">
+      <!-- Header -->
+      <div style="padding:64px 24px 40px; text-align:center;">
+        <div style="position:relative; width:64px; height:64px; margin:0 auto 20px;">
+          <div style="position:absolute; inset:0; background:rgba(139,92,246,0.25); border-radius:16px; filter:blur(12px);"></div>
+          <div style="position:relative; width:64px; height:64px; border-radius:16px; background:linear-gradient(135deg, rgba(124,58,237,0.3), #0f0d1a, rgba(37,99,235,0.2)); border:1px solid rgba(139,92,246,0.3); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(24px); box-shadow:0 10px 25px rgba(139,92,246,0.2);">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgb(196,181,253)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+        </div>
+        <h1 id="auth-title" style="font-size:30px; font-weight:700; color:white; letter-spacing:-0.5px;">Welcome back</h1>
+        <p id="auth-subtitle" style="font-size:14px; color:rgba(196,181,253,0.6); margin-top:8px;">Sign in to manage your cards</p>
+      </div>
+      <!-- Form -->
+      <div style="padding:0 24px 40px;">
+        <div id="auth-error" class="error-box hidden"></div>
+        <form id="auth-form" style="display:flex; flex-direction:column; gap:14px;">
+          <!-- Name (signup only) -->
+          <div id="name-field" class="hidden" style="position:relative;">
+            <svg style="position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:10;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input id="input-name" type="text" placeholder="Full Name" class="m-input" style="padding-left:48px;">
+          </div>
+          <!-- Email -->
+          <div style="position:relative;">
+            <svg style="position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:10;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            <input id="input-email" type="email" placeholder="Email address" required class="m-input" style="padding-left:48px;">
+          </div>
+          <!-- Password -->
+          <div style="position:relative;">
+            <svg style="position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:10;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input id="input-password" type="password" placeholder="Password" required minlength="6" class="m-input" style="padding-left:48px; padding-right:48px;">
+            <button type="button" id="toggle-password" style="position:absolute; right:16px; top:50%; transform:translateY(-50%); padding:2px; z-index:10;">
+              <svg id="eye-show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eye-hide" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <!-- Referral (signup only) -->
+          <div id="referral-field" class="hidden" style="position:relative;">
+            <svg style="position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:10;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect width="24" height="5" x="0" y="7" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            <input id="input-referral" type="text" placeholder="Referral code (optional)" class="m-input" style="padding-left:48px;">
+          </div>
+          <div style="padding-top:8px;">
+            <button type="submit" id="auth-submit" class="btn-primary">
+              <span class="flex items-center justify-center gap-2">Sign In <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+            </button>
+          </div>
+        </form>
+        <!-- Toggle -->
+        <div style="margin-top:32px; text-align:center;">
+          <button id="auth-toggle" style="font-size:14px; color:rgba(196,181,253,0.6);">
+            Don't have an account? <span style="color:#a78bfa; font-weight:500;">Sign Up</span>
+          </button>
+        </div>
+        <!-- Feature pills -->
+        <div style="margin-top:40px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:12px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span style="font-size:10px; color:rgba(196,181,253,0.65); font-weight:500;">Zero KYC</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:12px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span style="font-size:10px; color:rgba(196,181,253,0.65); font-weight:500;">Instant</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:12px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            <span style="font-size:10px; color:rgba(196,181,253,0.65); font-weight:500;">Crypto Cards</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD SCREEN ===== -->
+<div id="screen-dashboard" class="screen">
+  <div style="min-height:100dvh; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:384px; height:384px; top:-128px; right:-128px;"></div>
+    <div class="glow-blue" style="width:288px; height:288px; bottom:160px; left:-96px;"></div>
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse at top right, rgba(139,92,246,0.06) 0%, transparent 50%);"></div>
+    <!-- Header -->
+    <div class="app-header">
+      <div class="flex items-center gap-3">
+        <div style="width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg, rgba(124,58,237,0.3), rgba(37,99,235,0.2)); border:1px solid rgba(139,92,246,0.25); display:flex; align-items:center; justify-content:center; box-shadow:0 10px 25px rgba(139,92,246,0.1);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgb(196,181,253)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div>
+          <h1 style="font-size:16px; font-weight:700; color:white; letter-spacing:-0.3px;">PrivatePay</h1>
+          <p id="dash-email" style="font-size:11px; color:rgba(196,181,253,0.65); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;"></p>
+        </div>
+      </div>
+      <button id="btn-logout" style="padding:10px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+    <div style="padding:20px 16px; position:relative; z-index:10;">
+      <!-- Welcome card -->
+      <div style="position:relative; border-radius:16px; overflow:hidden; margin-bottom:20px;">
+        <div style="position:absolute; inset:0; background:linear-gradient(to right, rgba(139,92,246,0.08), rgba(59,130,246,0.04));"></div>
+        <div style="position:absolute; top:0; right:0; width:96px; height:96px; background:rgba(139,92,246,0.1); border-radius:50%; filter:blur(16px);"></div>
+        <div style="position:relative; padding:20px; border:1px solid rgba(139,92,246,0.18); border-radius:16px;">
+          <div class="flex justify-between items-center">
+            <div>
+              <p style="color:rgba(196,181,253,0.6); font-size:12px; text-transform:uppercase; letter-spacing:1px;">Welcome back</p>
+              <p id="dash-name" style="color:white; font-size:20px; font-weight:700; margin-top:4px;"></p>
+            </div>
+            <div class="text-right">
+              <p style="color:rgba(196,181,253,0.6); font-size:12px; text-transform:uppercase; letter-spacing:1px;">Cards</p>
+              <p id="dash-card-count" style="color:#a78bfa; font-size:24px; font-weight:700; margin-top:4px;">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Issue button -->
+      <button id="btn-issue-card" class="btn-primary" style="margin-bottom:20px;">
+        <span class="flex items-center justify-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Issue New Card
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.6;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </button>
+      <!-- Cards list header -->
+      <div class="flex justify-between items-center" style="margin-bottom:12px;">
+        <h2 style="font-size:14px; font-weight:600; color:rgba(196,181,253,0.65); text-transform:uppercase; letter-spacing:1px;">Your Cards</h2>
+        <button id="btn-refresh-cards" style="padding:8px; border-radius:8px;">
+          <svg id="refresh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </div>
+      <!-- Cards container -->
+      <div id="cards-container"></div>
+      <div style="height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ISSUE FORM SCREEN ===== -->
+<div id="screen-issue-form" class="screen">
+  <div style="min-height:100dvh; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:288px; height:288px; top:-80px; right:-80px;"></div>
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse at top right, rgba(139,92,246,0.05) 0%, transparent 50%);"></div>
+    <div class="app-header">
+      <button id="issue-form-back" style="padding:8px; margin-left:-8px; border-radius:12px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(232,221,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      <h1 style="font-size:16px; font-weight:600; color:white; letter-spacing:-0.2px;">Issue New Card</h1>
+      <div style="width:36px;"></div>
+    </div>
+    <div style="padding:20px 16px; position:relative; z-index:10;">
+      <div id="issue-form-error" class="error-box hidden"></div>
+      <!-- Card preview -->
+      <div style="position:relative; margin-bottom:20px;">
+        <div style="position:absolute; inset:0; background:rgba(139,92,246,0.1); border-radius:16px; filter:blur(12px);"></div>
+        <div style="position:relative; border-radius:16px; padding:20px; background:linear-gradient(135deg, rgba(88,28,135,0.4), #0f0d1a, rgba(30,58,138,0.3)); border:1px solid rgba(139,92,246,0.22); backdrop-filter:blur(24px);">
+          <div style="position:absolute; top:12px; right:12px; width:48px; height:48px; background:rgba(139,92,246,0.1); border-radius:50%; filter:blur(12px);"></div>
+          <div class="flex justify-between items-center" style="margin-bottom:24px;">
+            <div class="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span style="font-size:9px; font-weight:700; color:rgba(196,181,253,0.6); letter-spacing:3px; text-transform:uppercase;">PrivatePay</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          </div>
+          <p class="font-mono" style="font-size:14px; color:rgba(196,181,253,0.65); letter-spacing:2px; margin-bottom:20px;">4938 •••• •••• ••••</p>
+          <div class="flex justify-between" style="align-items:flex-end;">
+            <div><p style="font-size:9px; color:rgba(196,181,253,0.65); text-transform:uppercase;">Cardholder</p><p id="preview-name" style="color:rgba(255,255,255,0.85); font-weight:600; font-size:12px;">YOUR NAME</p></div>
+            <div class="text-right"><p style="font-size:9px; color:rgba(196,181,253,0.65); text-transform:uppercase;">Balance</p><p id="preview-balance" style="color:white; font-weight:700; font-size:14px;">$10.00</p></div>
+          </div>
+        </div>
+      </div>
+      <!-- Form fields -->
+      <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:20px;">
+        <div>
+          <label style="font-size:12px; font-weight:500; color:rgba(196,181,253,0.65); text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:6px;">Cardholder Name</label>
+          <input id="input-card-name" type="text" placeholder="JOHN DOE" class="m-input" style="text-transform:uppercase;">
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:500; color:rgba(196,181,253,0.65); text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:6px;">Initial Balance</label>
+          <div style="position:relative;">
+            <span style="position:absolute; left:16px; top:50%; transform:translateY(-50%); color:rgba(167,139,250,0.55); font-weight:600;">$</span>
+            <input id="input-topup" type="number" value="10" min="10" placeholder="10" class="m-input" style="padding-left:36px;">
+          </div>
+          <p style="font-size:11px; color:rgba(196,181,253,0.4); margin-top:4px;">Minimum $10</p>
+        </div>
+      </div>
+      <!-- Fee breakdown -->
+      <div class="glass" style="padding:16px; margin-bottom:20px;">
+        <div class="flex justify-between" style="font-size:14px; margin-bottom:12px;"><span style="color:rgba(196,181,253,0.6);">Initial Balance</span><span id="fee-balance" style="color:rgba(255,255,255,0.9);">$10.00</span></div>
+        <div class="flex justify-between" style="font-size:14px; margin-bottom:12px;"><span style="color:rgba(196,181,253,0.6);">Card Fee</span><span style="color:rgba(255,255,255,0.9);">$30.00</span></div>
+        <div class="flex justify-between" style="font-size:14px; margin-bottom:12px;"><span style="color:rgba(196,181,253,0.6);">Service (3% + $1)</span><span id="fee-service" style="color:rgba(255,255,255,0.9);">$1.30</span></div>
+        <div style="border-top:1px solid rgba(139,92,246,0.18); padding-top:12px;" class="flex justify-between items-center">
+          <span style="color:white; font-weight:600;">Total</span>
+          <span id="fee-total" style="color:#a78bfa; font-weight:700; font-size:20px;">$41.30</span>
+        </div>
+      </div>
+      <!-- Payment method -->
+      <div class="glass" style="padding:16px; margin-bottom:20px;">
+        <div class="flex items-center gap-3">
+          <div style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.1)); border:1px solid rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+          </div>
+          <div>
+            <p style="font-size:14px; font-weight:500; color:rgba(255,255,255,0.9);">Pay with Solana (SOL)</p>
+            <p style="font-size:12px; color:rgba(196,181,253,0.65); margin-top:2px;">You'll be shown a wallet address after clicking continue</p>
+          </div>
+        </div>
+      </div>
+      <!-- Token requirement -->
+      <div class="glass flex items-center gap-2" style="padding:12px; margin-bottom:20px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <p style="font-size:11px; color:rgba(196,181,253,0.6);">Wallet must hold <span style="color:rgba(167,139,250,0.7); font-weight:600;">5,000,000</span> $PRIVATE tokens</p>
+      </div>
+      <button id="btn-continue-payment" class="btn-primary">
+        <span class="flex items-center justify-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+          <span id="btn-continue-text">Continue to Payment — $41.30</span>
+        </span>
+      </button>
+      <p style="text-align:center; font-size:11px; color:rgba(196,181,253,0.35); margin-top:16px;">⏳ Please allow up to 1 hour for your card to become active after issuance.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAYMENT SCREEN ===== -->
+<div id="screen-payment" class="screen">
+  <div style="min-height:100dvh; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="app-header">
+      <button id="payment-back" style="padding:8px; margin-left:-8px; border-radius:12px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(232,221,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      <h1 style="font-size:16px; font-weight:600; color:white;">Send Payment</h1>
+      <div class="flex items-center gap-1" style="color:#fbbf24;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="payment-timer" class="font-mono" style="font-size:12px; font-weight:700;">15:00</span>
+      </div>
+    </div>
+    <div style="padding:20px 16px; position:relative; z-index:10;">
+      <div id="payment-error" class="error-box hidden"></div>
+      <!-- Amount display -->
+      <div style="text-align:center; padding:32px 0; border-radius:16px; background:linear-gradient(to bottom, rgba(139,92,246,0.06), transparent); border:1px solid rgba(139,92,246,0.18); backdrop-filter:blur(8px); position:relative; overflow:hidden; margin-bottom:16px;">
+        <div class="glow-purple" style="width:192px; height:192px; top:0; left:50%; transform:translateX(-50%) translateY(-50%);"></div>
+        <div style="position:relative; z-index:10;">
+          <p style="font-size:12px; color:rgba(196,181,253,0.6); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">Send exactly</p>
+          <p id="payment-sol" class="font-mono" style="font-size:36px; font-weight:700; color:white;"></p>
+          <p style="font-size:18px; color:#a78bfa; font-weight:600; margin-top:4px;">SOL</p>
+          <p id="payment-usd" style="font-size:12px; color:rgba(196,181,253,0.65); margin-top:8px;"></p>
+        </div>
+      </div>
+      <!-- Wallet address -->
+      <div class="glass" style="padding:16px; margin-bottom:16px;">
+        <p style="font-size:12px; color:rgba(196,181,253,0.6); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Send to this Solana address</p>
+        <div class="flex items-center gap-2">
+          <code id="payment-wallet" class="font-mono break-all" style="flex:1; font-size:12px; color:rgba(255,255,255,0.9); background:#12101e; padding:12px; border-radius:8px; border:1px solid rgba(139,92,246,0.14);"></code>
+          <button id="btn-copy-wallet" style="padding:12px; border-radius:8px; background:#12101e; border:1px solid rgba(139,92,246,0.14); flex-shrink:0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- SOL price -->
+      <div class="glass flex justify-between items-center" style="padding:14px; margin-bottom:16px;">
+        <span style="font-size:14px; color:rgba(196,181,253,0.6);">SOL Price</span>
+        <span id="payment-sol-price" style="font-size:14px; color:white; font-weight:600;"></span>
+      </div>
+      <!-- Warning -->
+      <div style="padding:12px; border-radius:12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.15); margin-bottom:16px;">
+        <p style="font-size:12px; color:rgba(251,191,35,0.8);">⚠️ Send on <strong>Solana Mainnet</strong> only. Payments on other networks will be lost.</p>
+      </div>
+      <button id="btn-verify-payment" class="btn-primary">
+        <span class="flex items-center justify-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          I Have Sent the Payment
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VERIFYING/PROCESSING SCREEN ===== -->
+<div id="screen-verifying" class="screen">
+  <div style="min-height:100dvh; display:flex; align-items:center; justify-content:center; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:288px; height:288px; top:33%; left:50%; transform:translateX(-50%);"></div>
+    <div style="position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(139,92,246,0.08) 0%, transparent 60%);"></div>
+    <div style="text-align:center; padding:0 32px; position:relative; z-index:10;">
+      <div style="position:relative; width:80px; height:80px; margin:0 auto 32px;">
+        <div class="animate-pulse" style="position:absolute; inset:0; background:rgba(139,92,246,0.2); border-radius:50%; filter:blur(12px);"></div>
+        <div style="position:relative; width:80px; height:80px; border-radius:50%; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); display:flex; align-items:center; justify-content:center;">
+          <svg class="animate-spin" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        </div>
+      </div>
+      <h2 id="verifying-title" style="font-size:20px; font-weight:700; color:white; margin-bottom:8px;">Verifying Payment</h2>
+      <p id="verifying-subtitle" style="color:rgba(196,181,253,0.6); font-size:14px;">Checking Solana blockchain...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CARD DETAILS SCREEN ===== -->
+<div id="screen-card-details" class="screen">
+  <div style="min-height:100dvh; background:#0d0b18; position:relative; overflow:hidden;">
+    <div class="glow-purple" style="width:288px; height:288px; top:-80px; right:0;"></div>
+    <div class="app-header">
+      <button id="card-details-back" style="padding:8px; margin-left:-8px; border-radius:12px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(232,221,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      <h1 style="font-size:16px; font-weight:600; color:white;">Card Details</h1>
+      <div style="width:36px;"></div>
+    </div>
+    <div style="padding:20px 16px; position:relative; z-index:10;">
+      <!-- Card visual -->
+      <div style="position:relative; margin-bottom:20px;">
+        <div style="position:absolute; inset:0; background:rgba(139,92,246,0.1); border-radius:16px; filter:blur(12px);"></div>
+        <div id="detail-card-visual" style="position:relative; border-radius:16px; padding:24px; background:linear-gradient(135deg, rgba(88,28,135,0.4), #0f0d1a, rgba(30,58,138,0.3)); border:1px solid rgba(139,92,246,0.22); backdrop-filter:blur(24px); box-shadow:0 25px 50px rgba(139,92,246,0.08);">
+          <div style="position:absolute; top:16px; right:16px; width:64px; height:64px; background:rgba(139,92,246,0.1); border-radius:50%; filter:blur(16px);"></div>
+          <div class="flex justify-between" style="align-items:flex-start; margin-bottom:32px;">
+            <div class="flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span style="font-size:10px; font-weight:700; color:rgba(196,181,253,0.6); letter-spacing:3px; text-transform:uppercase;">PrivatePay</span>
+            </div>
+            <div id="detail-status-badge" style="display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:9999px;"></div>
+          </div>
+          <p id="detail-card-number" class="font-mono" style="font-size:17px; color:rgba(255,255,255,0.9); letter-spacing:2px; margin-bottom:24px;"></p>
+          <div class="flex items-center justify-between" style="margin-bottom:24px;">
+            <div style="width:44px; height:32px; background:linear-gradient(135deg, rgba(250,204,21,0.3), rgba(202,138,4,0.3)); border:1px solid rgba(250,204,21,0.4); border-radius:6px; display:flex; align-items:center; justify-content:center;">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px;">
+                <div style="width:6px; height:6px; background:rgba(253,224,71,0.5); border-radius:2px;"></div>
+                <div style="width:6px; height:6px; background:rgba(253,224,71,0.5); border-radius:2px;"></div>
+                <div style="width:6px; height:6px; background:rgba(253,224,71,0.5); border-radius:2px;"></div>
+                <div style="width:6px; height:6px; background:rgba(253,224,71,0.5); border-radius:2px;"></div>
+              </div>
+            </div>
+            <div class="text-right">
+              <p style="font-size:9px; color:rgba(196,181,253,0.6); text-transform:uppercase; letter-spacing:1px;">Balance</p>
+              <p id="detail-balance" style="color:white; font-weight:700; font-size:18px;"></p>
+            </div>
+          </div>
+          <div class="flex justify-between" style="align-items:flex-end;">
+            <div><p style="font-size:9px; color:rgba(196,181,253,0.6); text-transform:uppercase; letter-spacing:1px;">Cardholder</p><p id="detail-name" style="color:rgba(255,255,255,0.9); font-weight:600; font-size:14px;"></p></div>
+            <div><p style="font-size:9px; color:rgba(196,181,253,0.6); text-transform:uppercase; letter-spacing:1px;">Expires</p><p id="detail-expiry" class="font-mono" style="color:rgba(255,255,255,0.9); font-size:14px;"></p></div>
+            <div>
+              <p style="font-size:9px; color:rgba(196,181,253,0.6); text-transform:uppercase; letter-spacing:1px;">CVV</p>
+              <div class="flex items-center gap-1">
+                <span id="detail-cvv" class="font-mono" style="color:rgba(255,255,255,0.9); font-size:14px;">•••</span>
+                <button id="btn-toggle-cvv" style="padding:2px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(196,181,253,0.65)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Copy buttons -->
+      <div id="detail-copy-buttons" style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;"></div>
+      <!-- Action buttons -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <button id="btn-topup" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); color:rgb(196,181,253); font-weight:500; font-size:14px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Top Up
+        </button>
+        <button id="btn-freeze" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; font-weight:500; font-size:14px;"></button>
+      </div>
+      <button id="btn-sync" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14); color:rgba(196,181,253,0.65); font-weight:500; font-size:14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Sync Balance
+      </button>
+      <div id="detail-pending-notice" class="hidden" style="padding:16px; border-radius:12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); margin-top:12px;">
+        <p style="font-size:14px; color:#fbbf24;">⏳ Your card is being activated. This may take up to 1 hour.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOPUP MODAL ===== -->
+<div id="topup-modal" class="hidden">
+  <div class="modal-overlay" id="topup-overlay">
+    <div class="modal-content">
+      <div class="flex justify-between items-center" style="padding:20px; border-bottom:1px solid rgba(139,92,246,0.14);">
+        <h2 style="font-size:18px; font-weight:700; color:white;">Add Balance</h2>
+        <button id="topup-close" style="padding:4px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(196,181,253,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding:20px;">
+        <!-- Step 1: Form -->
+        <div id="topup-step-form">
+          <div id="topup-error" class="error-box hidden"></div>
+          <div style="margin-bottom:16px;">
+            <label style="font-size:14px; font-weight:500; color:white; display:block; margin-bottom:8px;">Top-up Amount</label>
+            <div style="position:relative;">
+              <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:rgba(196,181,253,0.6);">$</span>
+              <input id="topup-amount" type="number" min="10" max="10000" value="50" class="m-input" style="padding-left:32px;">
+            </div>
+            <p style="font-size:12px; color:rgba(196,181,253,0.4); margin-top:4px;">Minimum: $10</p>
+          </div>
+          <div id="topup-fee-breakdown" class="glass" style="padding:16px; margin-bottom:16px;"></div>
+          <div style="margin-bottom:16px;">
+            <label style="font-size:14px; font-weight:500; color:white; display:block; margin-bottom:8px;">Quick Amount</label>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;" id="topup-presets"></div>
+          </div>
+          <button id="topup-continue" class="btn-primary"></button>
+        </div>
+        <!-- Step 2: Payment -->
+        <div id="topup-step-payment" class="hidden">
+          <div id="topup-pay-error" class="error-box hidden"></div>
+          <div class="glass" style="padding:16px; margin-bottom:16px;">
+            <div class="flex items-center gap-2" style="font-size:14px; font-weight:600; color:white; margin-bottom:12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              Send Payment
+            </div>
+            <p style="font-size:12px; color:rgba(196,181,253,0.6); margin-bottom:4px;">Send exactly this amount:</p>
+            <p id="topup-pay-sol" style="font-size:24px; font-weight:700; color:#a78bfa;" class="font-mono"></p>
+            <p id="topup-pay-usd" style="font-size:12px; color:rgba(196,181,253,0.6); margin-top:4px;"></p>
+            <div style="border-top:1px solid rgba(139,92,246,0.2); margin-top:12px; padding-top:12px;">
+              <p style="font-size:12px; color:rgba(196,181,253,0.6); margin-bottom:8px;">Send to wallet address:</p>
+              <div class="flex items-center gap-2">
+                <code id="topup-pay-wallet" class="font-mono break-all" style="flex:1; font-size:12px; padding:8px; border-radius:6px; background:rgba(139,92,246,0.05); color:rgba(255,255,255,0.9);"></code>
+                <button id="topup-copy-wallet" style="padding:8px; border-radius:8px; background:rgba(139,92,246,0.05);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2" style="font-size:14px; color:rgba(196,181,253,0.6); margin-bottom:16px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Payment expires in: <span id="topup-timer" class="font-mono" style="font-weight:700;"></span>
+          </div>
+          <button id="topup-verify" class="btn-primary" style="background:linear-gradient(135deg, #16a34a, #059669); border-color:rgba(22,163,74,0.4); box-shadow:0 8px 32px rgba(22,163,74,0.25);">
+            <span class="flex items-center justify-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              I Have Sent the Payment
+            </span>
+          </button>
+          <button id="topup-back-to-form" style="width:100%; font-size:14px; color:rgba(196,181,253,0.6); padding:12px; margin-top:12px;">Back to Amount</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// APP STATE
+// ==========================================
+const API = 'https://www.privatepay.site';
+let token = localStorage.getItem('pp_token') || '';
+let currentUser = null;
+let cards = [];
+let selectedCard = null;
+let issuedCard = null;
+let currentPayment = null;
+let paymentTimer = null;
+let showCVV = false;
+let topupCardId = '';
+let topupPayment = null;
+let topupTimer = null;
+
+// ==========================================
+// HELPERS
+// ==========================================
+function $(id) { return document.getElementById(id); }
+function show(id) { $(id)?.classList.remove('hidden'); $(id)?.classList.add('active'); }
+function hide(id) { $(id)?.classList.remove('active'); $(id)?.classList.add('hidden'); }
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => { s.classList.remove('active'); });
+  const el = $('screen-' + name);
+  if (el) el.classList.add('active');
+}
+
+function formatCard(n) { return n.replace(/\s/g, '').match(/.{1,4}/g)?.join(' ') || n; }
+function formatTime(s) { return Math.floor(s/60) + ':' + (s%60).toString().padStart(2,'0'); }
+
+function copyText(text, btnEl) {
+  navigator.clipboard.writeText(text);
+  if (btnEl) {
+    const orig = btnEl.innerHTML;
+    btnEl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    setTimeout(() => { btnEl.innerHTML = orig; }, 2000);
+  }
+}
+
+async function authFetch(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return fetch(API + path, { ...opts, headers });
+}
+
+function showError(id, msg) {
+  const el = $(id);
+  if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+}
+function hideError(id) {
+  const el = $(id);
+  if (el) el.classList.add('hidden');
+}
+
+// ==========================================
+// SPLASH → AUTH/DASHBOARD
+// ==========================================
+setTimeout(async () => {
+  if (token) {
+    try {
+      const res = await authFetch('/api/cards');
+      const data = await res.json();
+      if (data.success) {
+        cards = data.cards || [];
+        // Get user info
+        const userRes = await authFetch('/api/auth/me');
+        const userData = await userRes.json();
+        if (userData.user) {
+          currentUser = userData.user;
+          renderDashboard();
+          showScreen('dashboard');
+          return;
+        }
+      }
+    } catch(e) { console.error(e); }
+    // Token invalid
+    token = '';
+    localStorage.removeItem('pp_token');
+  }
+  showScreen('auth');
+}, 2500);
+
+// ==========================================
+// AUTH
+// ==========================================
+let authMode = 'login';
+
+$('auth-toggle').onclick = () => {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  updateAuthUI();
+};
+
+function updateAuthUI() {
+  $('auth-title').textContent = authMode === 'login' ? 'Welcome back' : 'Get Started';
+  $('auth-subtitle').textContent = authMode === 'login' ? 'Sign in to manage your cards' : 'Create your PrivatePay account';
+  if (authMode === 'signup') {
+    $('name-field').classList.remove('hidden');
+    $('referral-field').classList.remove('hidden');
+    $('auth-submit').innerHTML = '<span class="flex items-center justify-center gap-2">Create Account <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>';
+    $('auth-toggle').innerHTML = 'Already have an account? <span style="color:#a78bfa; font-weight:500;">Sign In</span>';
+  } else {
+    $('name-field').classList.add('hidden');
+    $('referral-field').classList.add('hidden');
+    $('auth-submit').innerHTML = '<span class="flex items-center justify-center gap-2">Sign In <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>';
+    $('auth-toggle').innerHTML = "Don't have an account? <span style=\"color:#a78bfa; font-weight:500;\">Sign Up</span>";
+  }
+  hideError('auth-error');
+}
+
+$('toggle-password').onclick = () => {
+  const inp = $('input-password');
+  const isPass = inp.type === 'password';
+  inp.type = isPass ? 'text' : 'password';
+  $('eye-show').classList.toggle('hidden', isPass);
+  $('eye-hide').classList.toggle('hidden', !isPass);
+};
+
+$('auth-form').onsubmit = async (e) => {
+  e.preventDefault();
+  hideError('auth-error');
+  const email = $('input-email').value;
+  const password = $('input-password').value;
+  const name = $('input-name').value;
+  const referral = $('input-referral').value;
+
+  if (authMode === 'signup' && !name.trim()) {
+    showError('auth-error', 'Name is required');
+    return;
+  }
+
+  $('auth-submit').disabled = true;
+  $('auth-submit').innerHTML = '<svg class="animate-spin" style="margin:0 auto;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+
+  try {
+    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+    const body = authMode === 'login'
+      ? { email, password }
+      : { email, password, name, referralCode: referral || undefined };
+
+    const res = await fetch(API + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Authentication failed');
+    }
+
+    token = data.token;
+    localStorage.setItem('pp_token', token);
+    currentUser = data.user;
+
+    // Fetch cards
+    try {
+      const cardsRes = await authFetch('/api/cards');
+      const cardsData = await cardsRes.json();
+      if (cardsData.success) cards = cardsData.cards || [];
+    } catch(e) { console.error(e); }
+
+    renderDashboard();
+    showScreen('dashboard');
+  } catch (err) {
+    showError('auth-error', err.message || 'Network error');
+  } finally {
+    $('auth-submit').disabled = false;
+    updateAuthUI();
+  }
+};
+
+// ==========================================
+// DASHBOARD
+// ==========================================
+function renderDashboard() {
+  $('dash-email').textContent = currentUser?.email || '';
+  $('dash-name').textContent = currentUser?.name || '';
+  $('dash-card-count').textContent = cards.length;
+
+  const container = $('cards-container');
+  if (cards.length === 0) {
+    container.innerHTML = `
+      <div style="padding:64px 0; text-align:center; border-radius:16px; background:rgba(139,92,246,0.05); border:1px dashed rgba(139,92,246,0.12);">
+        <div style="width:56px; height:56px; margin:0 auto 16px; border-radius:16px; background:rgba(139,92,246,0.05); border:1px solid rgba(139,92,246,0.14); display:flex; align-items:center; justify-content:center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        </div>
+        <p style="color:rgba(196,181,253,0.6); font-weight:500;">No cards yet</p>
+        <p style="font-size:12px; color:rgba(196,181,253,0.35); margin-top:4px;">Issue your first virtual card to get started</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = cards.map(card => {
+    const sc = statusColors(card.status);
+    return `
+      <button onclick="openCardDetails('${card.id}')" style="width:100%; padding:16px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14); text-align:left; margin-bottom:10px; display:block;">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <div style="width:40px; height:40px; border-radius:12px; ${sc.bgStyle}; display:flex; align-items:center; justify-content:center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${sc.iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            </div>
+            <div>
+              <p style="color:white; font-weight:500; font-size:14px;">${card.nameOnCard}</p>
+              <p class="font-mono" style="color:rgba(196,181,253,0.4); font-size:12px; margin-top:2px;">•••• ${card.cardNumber.slice(-4)}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <p style="color:white; font-weight:700; font-size:14px;">$${card.balance.toFixed(2)}</p>
+              <div class="flex items-center gap-1" style="justify-content:flex-end; margin-top:2px;">
+                <div style="width:6px; height:6px; border-radius:50%; background:${sc.dotColor};"></div>
+                <p style="font-size:10px; font-weight:600; color:${sc.textColor};">${card.status}</p>
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </button>`;
+  }).join('');
+}
+
+function statusColors(status) {
+  const map = {
+    ACTIVE: { bgStyle:'background:rgba(16,185,129,0.1)', iconColor:'rgba(16,185,129,0.8)', dotColor:'#34d399', textColor:'#34d399' },
+    FROZEN: { bgStyle:'background:rgba(59,130,246,0.1)', iconColor:'rgba(59,130,246,0.8)', dotColor:'#60a5fa', textColor:'#60a5fa' },
+    CANCELLED: { bgStyle:'background:rgba(239,68,68,0.1)', iconColor:'rgba(239,68,68,0.8)', dotColor:'#f87171', textColor:'#f87171' },
+    PENDING: { bgStyle:'background:rgba(245,158,11,0.1)', iconColor:'rgba(245,158,11,0.8)', dotColor:'#fbbf24', textColor:'#fbbf24' },
+  };
+  return map[status] || map.ACTIVE;
+}
+
+$('btn-logout').onclick = () => {
+  token = '';
+  localStorage.removeItem('pp_token');
+  currentUser = null;
+  cards = [];
+  $('input-email').value = '';
+  $('input-password').value = '';
+  $('input-name').value = '';
+  showScreen('auth');
+};
+
+$('btn-refresh-cards').onclick = async () => {
+  $('refresh-icon').classList.add('animate-spin');
+  try {
+    const res = await authFetch('/api/cards');
+    const data = await res.json();
+    if (data.success) { cards = data.cards || []; renderDashboard(); }
+  } catch(e) { console.error(e); }
+  $('refresh-icon').classList.remove('animate-spin');
+};
+
+$('btn-issue-card').onclick = () => {
+  hideError('issue-form-error');
+  $('input-card-name').value = currentUser?.name?.toUpperCase() || '';
+  $('input-topup').value = '10';
+  updateIssueForm();
+  showScreen('issue-form');
+};
+
+// ==========================================
+// ISSUE CARD FORM
+// ==========================================
+function updateIssueForm() {
+  const topup = parseFloat($('input-topup').value) || 10;
+  const serviceFee = topup * 0.03 + 1;
+  const total = topup + 30 + serviceFee;
+  $('preview-name').textContent = $('input-card-name').value || 'YOUR NAME';
+  $('preview-balance').textContent = '$' + topup.toFixed(2);
+  $('fee-balance').textContent = '$' + topup.toFixed(2);
+  $('fee-service').textContent = '$' + serviceFee.toFixed(2);
+  $('fee-total').textContent = '$' + total.toFixed(2);
+  $('btn-continue-text').textContent = 'Continue to Payment — $' + total.toFixed(2);
+}
+
+$('input-card-name').oninput = () => updateIssueForm();
+$('input-topup').oninput = () => updateIssueForm();
+$('issue-form-back').onclick = () => showScreen('dashboard');
+
+$('btn-continue-payment').onclick = async () => {
+  hideError('issue-form-error');
+  const nameOnCard = $('input-card-name').value.trim();
+  const topup = parseFloat($('input-topup').value);
+
+  if (!nameOnCard) { showError('issue-form-error', 'Cardholder name is required'); return; }
+  if (isNaN(topup) || topup < 10) { showError('issue-form-error', 'Minimum topup is $10'); return; }
+
+  const serviceFee = topup * 0.03 + 1;
+  const totalAmount = topup + 30 + serviceFee;
+
+  $('btn-continue-payment').disabled = true;
+  $('btn-continue-payment').innerHTML = '<svg class="animate-spin" style="margin:0 auto;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+
+  try {
+    const res = await authFetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amountUsd: totalAmount, topupAmount: topup,
+        cardFee: 30, serviceFee,
+        nameOnCard, cardType: 'issue',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to create payment');
+
+    currentPayment = data.payment;
+    renderPaymentScreen();
+    showScreen('payment');
+  } catch (err) {
+    showError('issue-form-error', err.message || 'Failed to create payment');
+  } finally {
+    $('btn-continue-payment').disabled = false;
+    $('btn-continue-payment').innerHTML = '<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><span id="btn-continue-text">Continue to Payment</span></span>';
+    updateIssueForm();
+  }
+};
+
+// ==========================================
+// PAYMENT SCREEN
+// ==========================================
+function renderPaymentScreen() {
+  if (!currentPayment) return;
+  $('payment-sol').textContent = currentPayment.amountSol.toFixed(6);
+  $('payment-usd').textContent = '≈ $' + currentPayment.amountUsd.toFixed(2) + ' USD';
+  $('payment-wallet').textContent = currentPayment.paymentWallet;
+  $('payment-sol-price').textContent = '$' + currentPayment.solPrice.toFixed(2);
+  hideError('payment-error');
+  startPaymentTimer();
+}
+
+function startPaymentTimer() {
+  if (paymentTimer) clearInterval(paymentTimer);
+  const update = () => {
+    if (!currentPayment?.expiresAt) return;
+    const diff = Math.max(0, Math.floor((new Date(currentPayment.expiresAt).getTime() - Date.now()) / 1000));
+    $('payment-timer').textContent = formatTime(diff);
+    if (diff === 0) {
+      clearInterval(paymentTimer);
+      showError('payment-error', 'Payment expired. Please try again.');
+      setTimeout(() => { currentPayment = null; showScreen('issue-form'); }, 2000);
+    }
+  };
+  update();
+  paymentTimer = setInterval(update, 1000);
+}
+
+$('payment-back').onclick = () => {
+  if (paymentTimer) clearInterval(paymentTimer);
+  currentPayment = null;
+  showScreen('issue-form');
+};
+
+$('btn-copy-wallet').onclick = () => {
+  if (currentPayment) copyText(currentPayment.paymentWallet, $('btn-copy-wallet'));
+};
+
+$('btn-verify-payment').onclick = async () => {
+  if (!currentPayment) return;
+  hideError('payment-error');
+
+  $('btn-verify-payment').disabled = true;
+  $('btn-verify-payment').innerHTML = '<span class="flex items-center justify-center gap-2"><svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Verifying...</span>';
+
+  // Show verifying screen
+  $('verifying-title').textContent = 'Verifying Payment';
+  $('verifying-subtitle').textContent = 'Checking Solana blockchain...';
+  showScreen('verifying');
+
+  try {
+    const res = await authFetch('/api/payments/auto-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: currentPayment.id }),
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showError('payment-error', data.message || 'Payment not detected yet. Try again.');
+      showScreen('payment');
+      $('btn-verify-payment').disabled = false;
+      $('btn-verify-payment').innerHTML = '<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> I Have Sent the Payment</span>';
+      return;
+    }
+
+    // Processing
+    $('verifying-title').textContent = 'Issuing Your Card';
+    $('verifying-subtitle').textContent = 'Creating your virtual card...';
+
+    const issueRes = await authFetch('/api/payments/' + currentPayment.id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txSignature: data.txSignature }),
+    });
+    const issueData = await issueRes.json();
+
+    if (!issueRes.ok || !issueData.success) throw new Error(issueData.error || 'Card creation failed');
+
+    if (paymentTimer) clearInterval(paymentTimer);
+
+    setTimeout(() => {
+      if (issueData.card) {
+        issuedCard = issueData.card;
+        selectedCard = {
+          id: issueData.card.id,
+          kripiCardId: issueData.card.id,
+          cardNumber: issueData.card.cardNumber,
+          expiryDate: issueData.card.expiryDate,
+          cvv: issueData.card.cvv,
+          nameOnCard: issueData.card.nameOnCard,
+          balance: issueData.card.balance || 0,
+          status: issueData.card.status || 'ACTIVE',
+          createdAt: new Date().toISOString(),
+        };
+        cards.push(selectedCard);
+        showCVV = false;
+        renderCardDetails();
+        showScreen('card-details');
+      }
+    }, 1500);
+  } catch (err) {
+    showError('payment-error', err.message || 'Failed');
+    showScreen('payment');
+  } finally {
+    $('btn-verify-payment').disabled = false;
+    $('btn-verify-payment').innerHTML = '<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> I Have Sent the Payment</span>';
+  }
+};
+
+// ==========================================
+// CARD DETAILS
+// ==========================================
+function openCardDetails(cardId) {
+  selectedCard = cards.find(c => c.id === cardId);
+  if (!selectedCard) return;
+  showCVV = false;
+  renderCardDetails();
+  showScreen('card-details');
+}
+
+function renderCardDetails() {
+  const card = selectedCard;
+  if (!card) return;
+  const sc = statusColors(card.status);
+
+  $('detail-card-number').textContent = formatCard(card.cardNumber);
+  $('detail-balance').textContent = '$' + card.balance.toFixed(2);
+  $('detail-name').textContent = card.nameOnCard;
+  $('detail-expiry').textContent = card.expiryDate;
+  $('detail-cvv').textContent = showCVV ? card.cvv : '•••';
+
+  // Status badge
+  const statusClass = 'status-' + card.status.toLowerCase();
+  $('detail-status-badge').className = statusClass;
+  $('detail-status-badge').style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:9999px;';
+  $('detail-status-badge').innerHTML = `<div style="width:6px; height:6px; border-radius:50%; background:${sc.dotColor};" class="animate-pulse"></div><span style="font-size:10px; font-weight:700; color:${sc.textColor};">${card.status}</span>`;
+
+  // Copy buttons
+  const items = [
+    { label: 'Card Number', value: card.cardNumber.replace(/\s/g,''), display: formatCard(card.cardNumber), key: 'num' },
+    { label: 'Expiry Date', value: card.expiryDate, display: card.expiryDate, key: 'exp' },
+    { label: 'CVV', value: card.cvv, display: showCVV ? card.cvv : '•••', key: 'cvv' },
+  ];
+  $('detail-copy-buttons').innerHTML = items.map(item => `
+    <button onclick="copyText('${item.value}', this)" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px; border-radius:12px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.14); text-align:left;">
+      <div>
+        <p style="font-size:10px; color:rgba(196,181,253,0.65); text-transform:uppercase; letter-spacing:1px;">${item.label}</p>
+        <p class="font-mono" style="color:rgba(255,255,255,0.9); font-size:14px; margin-top:2px;">${item.display}</p>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+    </button>
+  `).join('');
+
+  // Freeze/unfreeze button
+  if (card.status === 'ACTIVE') {
+    $('btn-freeze').style.cssText = 'display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2); color:#60a5fa; font-weight:500; font-size:14px;';
+    $('btn-freeze').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20M12 2v20m8-16-4 4m-8 0-4-4m0 16 4-4m8 0 4 4"/></svg> Freeze';
+  } else {
+    $('btn-freeze').style.cssText = 'display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); color:#34d399; font-weight:500; font-size:14px;';
+    $('btn-freeze').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Unfreeze';
+  }
+
+  // Pending notice
+  if (card.status === 'PENDING') {
+    $('detail-pending-notice').classList.remove('hidden');
+  } else {
+    $('detail-pending-notice').classList.add('hidden');
+  }
+}
+
+$('card-details-back').onclick = () => {
+  selectedCard = null;
+  issuedCard = null;
+  renderDashboard();
+  showScreen('dashboard');
+};
+
+$('btn-toggle-cvv').onclick = () => {
+  showCVV = !showCVV;
+  renderCardDetails();
+};
+
+$('btn-freeze').onclick = async () => {
+  if (!selectedCard) return;
+  const action = selectedCard.status === 'ACTIVE' ? 'freeze' : 'unfreeze';
+  $('btn-freeze').innerHTML = '<svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+
+  try {
+    const res = await authFetch('/api/cards/' + selectedCard.id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (res.ok) {
+      const newStatus = action === 'freeze' ? 'FROZEN' : 'ACTIVE';
+      selectedCard.status = newStatus;
+      cards = cards.map(c => c.id === selectedCard.id ? { ...c, status: newStatus } : c);
+      renderCardDetails();
+    }
+  } catch(e) { console.error(e); }
+};
+
+$('btn-sync').onclick = async () => {
+  if (!selectedCard) return;
+  $('btn-sync').innerHTML = '<svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Syncing...';
+
+  try {
+    const res = await authFetch('/api/cards/' + selectedCard.id);
+    const data = await res.json();
+    if (data.success) {
+      Object.assign(selectedCard, data.card);
+      cards = cards.map(c => c.id === selectedCard.id ? { ...c, ...data.card } : c);
+      renderCardDetails();
+    }
+  } catch(e) { console.error(e); }
+  $('btn-sync').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Sync Balance';
+};
+
+// ==========================================
+// TOPUP MODAL
+// ==========================================
+$('btn-topup').onclick = () => {
+  if (!selectedCard) return;
+  topupCardId = selectedCard.id;
+  topupPayment = null;
+  $('topup-amount').value = '50';
+  $('topup-step-form').classList.remove('hidden');
+  $('topup-step-payment').classList.add('hidden');
+  hideError('topup-error');
+  updateTopupForm();
+  renderTopupPresets();
+  $('topup-modal').classList.remove('hidden');
+};
+
+$('topup-close').onclick = () => $('topup-modal').classList.add('hidden');
+$('topup-overlay').onclick = (e) => { if (e.target === $('topup-overlay')) $('topup-modal').classList.add('hidden'); };
+
+function updateTopupForm() {
+  const amt = parseFloat($('topup-amount').value) || 0;
+  const fee = amt > 0 ? amt * 0.03 + 1 : 0;
+  const total = amt + fee;
+
+  $('topup-fee-breakdown').innerHTML = amt > 0 ? `
+    <div class="flex justify-between" style="font-size:14px; margin-bottom:8px;"><span style="color:rgba(196,181,253,0.6);">Top-up Amount:</span><span style="color:white; font-weight:600;">$${amt.toFixed(2)}</span></div>
+    <div class="flex justify-between" style="font-size:14px; margin-bottom:8px;"><span style="color:rgba(196,181,253,0.6);">Fee (3% + $1):</span><span style="color:white; font-weight:600;">$${fee.toFixed(2)}</span></div>
+    <div style="border-top:1px solid rgba(139,92,246,0.18); padding-top:8px;" class="flex justify-between"><span style="font-weight:600; color:white;">Total Payment:</span><span style="font-weight:700; font-size:18px; color:#a78bfa;">$${total.toFixed(2)}</span></div>
+  ` : '';
+
+  $('topup-continue').innerHTML = `<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg> Continue to Payment - $${total.toFixed(2)}</span>`;
+  $('topup-continue').disabled = amt < 10;
+}
+
+$('topup-amount').oninput = () => { updateTopupForm(); renderTopupPresets(); };
+
+function renderTopupPresets() {
+  const current = $('topup-amount').value;
+  $('topup-presets').innerHTML = [10,25,50,100,250,500].map(p => `
+    <button onclick="document.getElementById('topup-amount').value='${p}'; updateTopupForm(); renderTopupPresets();" style="padding:8px; border-radius:8px; font-size:14px; border:1px solid ${current==p ? 'rgba(139,92,246,0.5)' : 'rgba(139,92,246,0.14)'}; background:${current==p ? 'rgba(139,92,246,0.1)' : 'transparent'}; color:${current==p ? '#a78bfa' : 'rgba(196,181,253,0.6)'}; font-weight:${current==p ? '600' : '400'};">$${p}</button>
+  `).join('');
+}
+
+$('topup-continue').onclick = async () => {
+  const amt = parseFloat($('topup-amount').value);
+  if (isNaN(amt) || amt < 10) { showError('topup-error', 'Minimum top-up amount is $10'); return; }
+  if (amt > 10000) { showError('topup-error', 'Amount cannot exceed $10,000'); return; }
+
+  const fee = amt * 0.03 + 1;
+  const total = amt + fee;
+  hideError('topup-error');
+
+  $('topup-continue').disabled = true;
+  $('topup-continue').innerHTML = '<svg class="animate-spin" style="margin:0 auto;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+
+  try {
+    const res = await authFetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amountUsd: total, topupAmount: amt,
+        topupFee: fee, cardType: 'topup',
+        targetCardId: topupCardId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to create payment');
+
+    topupPayment = data.payment;
+    renderTopupPayment();
+    $('topup-step-form').classList.add('hidden');
+    $('topup-step-payment').classList.remove('hidden');
+  } catch(err) {
+    showError('topup-error', err.message);
+  } finally {
+    $('topup-continue').disabled = false;
+    updateTopupForm();
+  }
+};
+
+function renderTopupPayment() {
+  if (!topupPayment) return;
+  $('topup-pay-sol').textContent = topupPayment.amountSol.toFixed(6) + ' SOL';
+  $('topup-pay-usd').textContent = '≈ $' + topupPayment.amountUsd.toFixed(2) + ' USD';
+  $('topup-pay-wallet').textContent = topupPayment.paymentWallet;
+  hideError('topup-pay-error');
+  startTopupTimer();
+}
+
+function startTopupTimer() {
+  if (topupTimer) clearInterval(topupTimer);
+  const update = () => {
+    if (!topupPayment?.expiresAt) return;
+    const diff = Math.max(0, Math.floor((new Date(topupPayment.expiresAt).getTime() - Date.now()) / 1000));
+    $('topup-timer').textContent = formatTime(diff);
+    if (diff === 0) {
+      clearInterval(topupTimer);
+      showError('topup-pay-error', 'Payment expired. Please create a new payment request.');
+      topupPayment = null;
+    }
+  };
+  update();
+  topupTimer = setInterval(update, 1000);
+}
+
+$('topup-copy-wallet').onclick = () => {
+  if (topupPayment) copyText(topupPayment.paymentWallet, $('topup-copy-wallet'));
+};
+
+$('topup-back-to-form').onclick = () => {
+  if (topupTimer) clearInterval(topupTimer);
+  topupPayment = null;
+  $('topup-step-payment').classList.add('hidden');
+  $('topup-step-form').classList.remove('hidden');
+  hideError('topup-pay-error');
+};
+
+$('topup-verify').onclick = async () => {
+  if (!topupPayment) return;
+  hideError('topup-pay-error');
+
+  $('topup-verify').disabled = true;
+  $('topup-verify').innerHTML = '<span class="flex items-center justify-center gap-2"><svg class="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Verifying...</span>';
+
+  try {
+    const res = await authFetch('/api/payments/auto-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: topupPayment.id }),
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showError('topup-pay-error', data.message || 'Payment not detected. Please wait and try again.');
+      $('topup-verify').disabled = false;
+      $('topup-verify').innerHTML = '<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> I Have Sent the Payment</span>';
+      return;
+    }
+
+    // Fund the card
+    const fundRes = await authFetch('/api/payments/' + topupPayment.id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txSignature: data.txSignature }),
+    });
+    const fundData = await fundRes.json();
+
+    if (!fundRes.ok) throw new Error(fundData.error || 'Failed to fund card');
+
+    // Success!
+    if (topupTimer) clearInterval(topupTimer);
+    $('topup-modal').classList.add('hidden');
+
+    // Refresh card
+    if (selectedCard) {
+      const syncRes = await authFetch('/api/cards/' + selectedCard.id);
+      const syncData = await syncRes.json();
+      if (syncData.success) {
+        Object.assign(selectedCard, syncData.card);
+        cards = cards.map(c => c.id === selectedCard.id ? { ...c, ...syncData.card } : c);
+        renderCardDetails();
+      }
+    }
+  } catch(err) {
+    showError('topup-pay-error', err.message || 'Failed to complete top-up');
+  } finally {
+    $('topup-verify').disabled = false;
+    $('topup-verify').innerHTML = '<span class="flex items-center justify-center gap-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> I Have Sent the Payment</span>';
+  }
+};
+</script>
+</body>
+</html>

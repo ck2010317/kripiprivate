@@ -67,17 +67,26 @@ export async function getCurrentUser() {
   const payload = await verifyToken(token)
   if (!payload) return null
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      createdAt: true,
-    },
-  })
+  try {
+    // 3-second timeout for DB query to prevent hanging on cold starts
+    const user = await Promise.race([
+      prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true,
+        },
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ])
 
-  return user
+    return user
+  } catch (error) {
+    console.error("[Auth] DB query failed:", error instanceof Error ? error.message : error)
+    return null
+  }
 }
 
 // Verify request has valid auth
