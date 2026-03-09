@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { getCardDetailsById } from "@/lib/kripicard-client"
+import { getCardDetails } from "@/lib/kripicard-client"
 
 export const maxDuration = 15
 
@@ -35,31 +35,19 @@ export async function POST(request: NextRequest) {
 
     const cardholderName = (nameOnCard || user.name || "CARDHOLDER").toUpperCase()
 
-    // Create card via KripiCard API (includes retry + validation - will throw if details invalid)
-    const kripiResponse = await createKripiCard({
-      amount,
-      name_on_card: cardholderName,
-      email: user.email,
-      bankBin: "49387519",
-    })
-
-    // CRITICAL: Double-check card details are valid (createKripiCard already validates, but be safe)
-    if (!kripiResponse.card_number || kripiResponse.card_number.length < 10 ||
-        !kripiResponse.cvv || kripiResponse.cvv.length < 3 ||
-        !kripiResponse.expiry_date || !kripiResponse.expiry_date.includes("/")) {
-      throw new Error(`Card created (ID: ${kripiResponse.card_id}) but got invalid details. Contact support.`)
-    }
-
-    // Store card in database with VALIDATED details
+    // Create a PENDING card in the database
+    // Admin will manually create the card on KripiCard dashboard and assign the ID
     const card = await prisma.card.create({
       data: {
-        kripiCardId: kripiResponse.card_id,
-        cardNumber: kripiResponse.card_number,
-        expiryDate: kripiResponse.expiry_date,
-        cvv: kripiResponse.cvv,
-        nameOnCard: cardholderName.toUpperCase(),
-        balance: kripiResponse.balance || amount,
+        nameOnCard: cardholderName,
+        balance: amount,
         userId: user.id,
+        status: "PENDING",
+        // These will be filled when admin assigns the card
+        kripiCardId: "",
+        cardNumber: "",
+        expiryDate: "",
+        cvv: "",
       },
     })
 
@@ -67,14 +55,12 @@ export async function POST(request: NextRequest) {
       success: true,
       card: {
         id: card.id,
-        cardNumber: card.cardNumber,
-        expiryDate: card.expiryDate,
-        cvv: card.cvv,
         nameOnCard: card.nameOnCard,
         balance: card.balance,
         status: card.status,
         createdAt: card.createdAt,
       },
+      message: "Card request submitted. Your card will be activated shortly.",
     })
   } catch (error) {
     console.error("[Cards] Create card error:", error)
@@ -118,13 +104,15 @@ export async function GET() {
     const syncedCards = await Promise.all(
       cards.map(async (card) => {
         // Skip sync for PENDING cards — they don't have a kripiCardId yet
-        if (card.status === "PENDING" || !card.kripiCardId) {
+        if (card.status === "PENDING" || !card.kripiCardId || !card.cardNumber) {
           return card
         }
 
         try {
+          // Use regular endpoint with last4 of card number (premium endpoint doesn't work for all cards)
+          const last4 = card.cardNumber.slice(-4)
           const kripiDetails = await Promise.race([
-            getCardDetailsById(card.kripiCardId),
+            getCardDetails(last4),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 4000))
           ])
           
@@ -181,8 +169,8 @@ export async function GET() {
             }
           }
           
-          // If KripiCard says the card doesn't exist or is cancelled, mark as CANCELLED
-          if (lowerMsg.includes("not found") || lowerMsg.includes("cancel") || lowerMsg.includes("closed") || lowerMsg.includes("terminated") || lowerMsg.includes("invalid card")) {
+          // Only mark as CANCELLED for explicit cancellation messages (not "not found" which happens with premium endpoint)
+          if (lowerMsg.includes("cancel") || lowerMsg.includes("closed") || lowerMsg.includes("terminated")) {
             console.log(`[Cards] Marking card ${card.id} as CANCELLED based on API error: ${errMsg}`)
             try {
               await prisma.card.update({

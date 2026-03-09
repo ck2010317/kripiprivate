@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { getCardDetailsById, fundPremiumCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
+import { getCardDetails, fundPremiumCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
 
 export const maxDuration = 15
 
@@ -38,9 +38,27 @@ export async function GET(
     }
 
     // Fetch latest details from KripiCard API and sync to DB
+    // Use regular endpoint with last4 (premium endpoint doesn't work for all cards)
+    const last4 = card.cardNumber?.slice(-4)
+    if (!last4) {
+      return NextResponse.json({
+        success: true,
+        card: {
+          id: card.id,
+          kripiCardId: card.kripiCardId,
+          cardNumber: card.cardNumber,
+          expiryDate: card.expiryDate,
+          cvv: card.cvv,
+          nameOnCard: card.nameOnCard,
+          balance: card.balance,
+          status: card.status,
+          createdAt: card.createdAt,
+        },
+      })
+    }
     try {
       const kripiDetails = await Promise.race([
-        getCardDetailsById(card.kripiCardId),
+        getCardDetails(last4),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 5000))
       ])
       
@@ -146,6 +164,15 @@ export async function POST(
       if (!amount || amount < 1) {
         return NextResponse.json(
           { error: "Amount must be at least $1" },
+          { status: 400 }
+        )
+      }
+
+      // Use premium Fund_Card endpoint with card_id (kripiCardId)
+      // Regular /cards/fundcard is offline (404)
+      if (!card.kripiCardId) {
+        return NextResponse.json(
+          { error: "Card not yet assigned by admin. Please wait for card activation." },
           { status: 400 }
         )
       }

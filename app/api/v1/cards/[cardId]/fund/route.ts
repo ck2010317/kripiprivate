@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withApiKey, sendWebhook } from "@/lib/api-middleware";
 import { prisma } from "@/lib/prisma";
-import { fundCard } from "@/lib/kripicard-client";
+import { fundPremiumCard } from "@/lib/kripicard-client";
 
 // POST /api/v1/cards/[cardId]/fund — Add funds to a card
 export async function POST(
@@ -99,10 +99,7 @@ export async function POST(
     }
 
     try {
-      const result = await fundCard({
-        card_id: card.kripiCardId,
-        amount,
-      });
+      const result = await fundPremiumCard(card.kripiCardId, amount);
 
       // Deduct from wallet
       const newWalletBalance = ctx.apiKey.walletBalance - totalCost;

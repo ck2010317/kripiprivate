@@ -519,25 +519,26 @@ export async function freezeUnfreezeCard(request: FreezeUnfreezeRequest): Promis
 }
 
 // Get card transactions from KripiCard
-// NOTE: KripiCard API does not have a dedicated transactions endpoint.
-// We use Get_CardDetails which may include transaction data, and also
-// log the full response so we can discover the actual data structure.
+// Uses regular /cards/carddetails endpoint which includes transaction data
 export async function getCardTransactions(cardId: string): Promise<CardTransactionsResponse> {
   if (!API_KEY) {
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
-  console.log("[KripiCard] Fetching transactions for card:", cardId)
-  console.log("[KripiCard] Using Get_CardDetails endpoint (no dedicated transactions endpoint)")
+  // cardId here is the kripiCardId (full card number like 4288130026993758)
+  // Extract last4 to use with regular endpoint
+  const last4 = cardId.slice(-4)
+  console.log("[KripiCard] Fetching transactions for card last4:", last4)
 
   try {
     const response = await fetch(
-      `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${cardId}`,
+      `${KRIPICARD_BASE_URL}/cards/carddetails`,
       {
-        method: "GET",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ api_key: API_KEY, last4 }),
       }
     )
 
@@ -567,36 +568,15 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
     }
 
-    // KripiCard Get_CardDetails response structure:
-    // { success: true, data: { details: {...}, Transactions: [...] } }
+    // Regular /cards/carddetails returns: { status: true, card: {...}, transactions: [...], currentBalance: N }
     let rawTransactions: Record<string, unknown>[] = []
     let foundField = ""
 
-    // Check the known structure first: data.data.Transactions (capital T)
-    const nestedData = data.data as Record<string, unknown> | undefined
-    if (nestedData) {
-      if (Array.isArray(nestedData.Transactions)) {
-        rawTransactions = nestedData.Transactions as Record<string, unknown>[]
-        foundField = "data.Transactions"
-        console.log(`[KripiCard] Found transactions in data.Transactions:`, rawTransactions.length, "items")
-      } else if (Array.isArray(nestedData.transactions)) {
-        rawTransactions = nestedData.transactions as Record<string, unknown>[]
-        foundField = "data.transactions"
-        console.log(`[KripiCard] Found transactions in data.transactions:`, rawTransactions.length, "items")
-      }
-    }
-
-    // Fallback: search all fields
-    if (rawTransactions.length === 0) {
-      const possibleFields = ["Transactions", "transactions", "Transaction", "data", "records", "history"]
-      for (const field of possibleFields) {
-        if (data[field] && Array.isArray(data[field])) {
-          rawTransactions = data[field] as Record<string, unknown>[]
-          foundField = field
-          console.log(`[KripiCard] Found transactions in field "${field}":`, rawTransactions.length, "items")
-          break
-        }
-      }
+    // Check for transactions array directly in response
+    if (Array.isArray(data.transactions)) {
+      rawTransactions = data.transactions as Record<string, unknown>[]
+      foundField = "transactions"
+      console.log(`[KripiCard] Found ${rawTransactions.length} transactions`)
     }
 
     if (rawTransactions.length === 0) {
@@ -609,48 +589,50 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       }
     }
 
-    console.log(`[KripiCard] Raw transactions from "${foundField}":`, JSON.stringify(rawTransactions, null, 2))
+    console.log(`[KripiCard] Raw transactions from "${foundField}":`, JSON.stringify(rawTransactions.slice(0, 2), null, 2))
 
-    // Normalize transaction data
+    // Normalize transaction data from KripiCard regular endpoint format
     const normalizedTransactions: CardTransaction[] = rawTransactions.map((tx, index) => {
-      // Parse amount - handle formats like "$-10.15", "-10.15", or numeric values
+      // Parse amount - KripiCard uses auth_amt, trade_amt, settle_amt
       let amount = 0
-      const rawAmount = tx.amount ?? tx.Amount ?? tx.transaction_amount ?? tx.value ?? tx.Value ?? 0
+      const rawAmount = tx.settle_amt ?? tx.trade_amt ?? tx.auth_amt ?? tx.amount ?? tx.Amount ?? 0
       if (typeof rawAmount === "string") {
         amount = Math.abs(parseFloat(rawAmount.replace(/[^\d.-]/g, "")) || 0)
       } else if (typeof rawAmount === "number") {
         amount = Math.abs(rawAmount)
       }
 
-      // Map KripiCard type to our normalized type
-      const rawType = String(tx.type ?? tx.Type ?? tx.transaction_type ?? tx.txn_type ?? "unknown").toLowerCase()
-      let type = rawType
-      if (rawType === "consumption" || rawType === "purchase" || rawType === "pos" || rawType === "debit") {
-        type = "purchase"
-      } else if (rawType === "refund" || rawType === "reversal" || rawType === "credit") {
-        type = "refund"
-      } else if (rawType === "cashback") {
-        type = "cashback"
-      } else if (rawType === "charge" || rawType === "fee") {
-        type = "charge"
+      // Merchant info from 'merchant' field or parsed from 'mark' field
+      const merchant = String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? "")
+
+      // Map KripiCard type codes to readable types
+      // type 5 = OTP/verification, type 1 = purchase, etc.
+      const rawType = tx.type ?? tx.Type ?? "unknown"
+      let type = "purchase"
+      if (rawType === 5 || String(rawType) === "5") type = "verification"
+      else if (rawType === 1 || String(rawType) === "1") type = "purchase"
+      else if (rawType === 2 || String(rawType) === "2") type = "refund"
+      else if (typeof rawType === "string") {
+        const lt = rawType.toLowerCase()
+        if (lt.includes("refund") || lt.includes("reversal")) type = "refund"
+        else if (lt.includes("purchase") || lt.includes("pos")) type = "purchase"
       }
 
-      const merchant = String(tx.merchant ?? tx.Merchant ?? tx.merchant_name ?? tx.merchantName ?? "")
-      
-      // Normalize status - KripiCard uses "Finish" 
-      let status = String(tx.status ?? tx.Status ?? "completed").toLowerCase()
-      if (status === "finish" || status === "settled") status = "completed"
+      // Normalize status - KripiCard uses result: 1 for success
+      let status = "completed"
+      if (tx.result === 0 || tx.result === "0") status = "declined"
+      else if (tx.result === 2 || tx.result === "2") status = "pending"
 
       return {
-        transaction_id: String(tx.transactionId ?? tx.transaction_id ?? tx.id ?? tx.txn_id ?? tx.reference ?? `tx-${index}`),
-        card_id: String(tx.card_id ?? tx.cardId ?? tx.cardNum ?? cardId),
+        transaction_id: String(tx.sn ?? tx.id ?? tx.transaction_id ?? `tx-${index}`),
+        card_id: String(tx.no ?? tx.card_id ?? tx.cardId ?? ""),
         type,
         amount,
         merchant,
-        description: String(tx.description ?? tx.Description ?? tx.remark ?? tx.memo ?? tx.note ?? (merchant || type)),
-        date: String(tx.recordTime ?? tx.date ?? tx.Date ?? tx.created_at ?? tx.transaction_date ?? tx.timestamp ?? new Date().toISOString()),
+        description: String(tx.mark ?? tx.description ?? tx.remark ?? (merchant || type)),
+        date: String(tx.created_at ?? tx.auth_at ?? tx.date ?? new Date().toISOString()),
         status,
-        currency: String(tx.currency ?? tx.Currency ?? "USD"),
+        currency: String(tx.settle_cuy === "840" ? "USD" : (tx.currency ?? "USD")),
       }
     })
 
