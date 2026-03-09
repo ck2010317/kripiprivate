@@ -59,15 +59,6 @@ export async function POST(req: NextRequest) {
     } catch (fetchError) {
       console.error(`[Admin Assign] Failed to fetch card details:`, fetchError)
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError)
-      
-      // Check if it's a format issue
-      if (trimmedKripiId.match(/^\d{13,}$/) && !trimmedKripiId.match(/^[A-Za-z]/)) {
-        return NextResponse.json(
-          { error: `Invalid card ID format. The ID "${trimmedKripiId}" looks like a BIN or card number. KripiCard card IDs should look like "C260220012745332523" or "VC123456789". Make sure you're using the full card ID from KripiCard dashboard, not the card number itself.` },
-          { status: 400 }
-        )
-      }
-      
       return NextResponse.json(
         { error: `Failed to fetch card details from provider: ${msg}` },
         { status: 502 }

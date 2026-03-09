@@ -667,10 +667,11 @@ export async function getCardDetailsById(cardId: string): Promise<CardDetailsRes
 
   const trimmedId = cardId.trim()
   console.log("[KripiCard] Fetching card details by ID:", trimmedId)
-  console.log("[KripiCard] Card ID format check - Length:", trimmedId.length, "Format:", trimmedId.match(/^[a-zA-Z0-9]+$/) ? "alphanumeric ✓" : "INVALID")
+  console.log("[KripiCard] Card ID format - Length:", trimmedId.length, "Type:", /^\d+$/.test(trimmedId) ? "numeric" : "alphanumeric")
   
+  // Accept both old format (C260220012745332523) and new format (4288130026993758)
   if (trimmedId.length < 10) {
-    throw new Error(`Card ID appears invalid (too short: ${trimmedId.length} chars). Expected format like 'C260220012745332523' or 'VC123456789'. Got: ${trimmedId}`)
+    throw new Error(`Card ID too short (${trimmedId.length} chars). Expected at least 10 characters. Got: ${trimmedId}`)
   }
 
   // Premium endpoint uses GET with query params
