@@ -1,9 +1,26 @@
 const KRIPICARD_BASE_URL = "https://kripicard.com/api"
-const API_KEY = process.env.KRIPICARD_API_KEY || ""
+const API_KEY = "6e9148a72d14806d9a3b079d4f5a511c9016b2be"
+
+/**
+ * KripiCard API Client - Updated March 2026
+ * 
+ * NEW CARD CREATION FLOW (4-hour manual ID approach):
+ * 1. User requests new card via /api/cards POST
+ * 2. Card is created in DB with status="PENDING" (no kripiCardId yet)
+ * 3. Return a temporary card ID to show user
+ * 4. User completes payment (4-hour window)
+ * 5. After 4 hours, manually call verifyAndSyncCardId() with the card_id from KripiCard
+ * 6. System fetches full card details using getCardDetailsById() and updates DB
+ * 
+ * EXISTING CARDS:
+ * - All existing cards remain in database unchanged
+ * - New requests use updated API endpoints (last4 instead of card_id for regular endpoints)
+ * - Premium endpoints use card_id for new cards with manual verification
+ */
 
 export interface CreateCardRequest {
   amount: number
-  bankBin?: string
+  bin?: string
   name_on_card: string
   email: string
 }
@@ -19,7 +36,7 @@ export interface CreateCardResponse {
 }
 
 export interface FundCardRequest {
-  card_id: string
+  last4: string
   amount: number
 }
 
@@ -105,7 +122,7 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     const payload = {
       api_key: API_KEY,
       amount: amount,
-      bankBin: request.bankBin || "49387519",
+      bin: request.bin || "428813",
       name_on_card: request.name_on_card.toUpperCase().trim(),
       email: request.email.toLowerCase().trim(),
     }
@@ -118,7 +135,7 @@ export async function createCard(request: CreateCardRequest): Promise<CreateCard
     console.log("[KripiCard] Email:", payload.email)
     console.log("[KripiCard] Sending payload:", JSON.stringify(payload, null, 2))
     
-    const url = `${KRIPICARD_BASE_URL}/premium/Create_card`
+    const url = `${KRIPICARD_BASE_URL}/cards/createcard`
     console.log("[KripiCard] Calling URL:", url)
     console.log("[KripiCard] Request headers:", { "Content-Type": "application/json" })
     
@@ -257,11 +274,11 @@ export async function fundCard(request: FundCardRequest): Promise<FundCardRespon
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
-  console.log("[KripiCard] Funding card", request.card_id, "with", request.amount, "USD")
+  console.log("[KripiCard] Funding card last4:", request.last4, "with", request.amount, "USD")
   
   // Validate inputs
-  if (!request.card_id || request.card_id.trim().length === 0) {
-    throw new Error("card_id is required and cannot be empty")
+  if (!request.last4 || request.last4.trim().length === 0) {
+    throw new Error("last4 is required and cannot be empty")
   }
 
   if (!request.amount || request.amount <= 0) {
@@ -274,14 +291,14 @@ export async function fundCard(request: FundCardRequest): Promise<FundCardRespon
     
     const payload = {
       api_key: API_KEY,
-      card_id: request.card_id.trim(),
+      last4: request.last4.trim(),
       amount: amount,
     }
     
     console.log("[KripiCard] Fund payload:", JSON.stringify(payload, null, 2))
     
-    const url = `${KRIPICARD_BASE_URL}/premium/Fund_Card`
-    console.log("[KripiCard] Calling Fund_Card endpoint:", url)
+    const url = `${KRIPICARD_BASE_URL}/cards/fundcard`
+    console.log("[KripiCard] Calling fundcard endpoint:", url)
     
     const response = await fetch(url, {
       method: "POST",
@@ -369,18 +386,24 @@ export async function fundCard(request: FundCardRequest): Promise<FundCardRespon
 }
 
 // Get card details
-export async function getCardDetails(cardId: string): Promise<CardDetailsResponse> {
+export async function getCardDetails(last4: string): Promise<CardDetailsResponse> {
   if (!API_KEY) {
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
+  const payload = {
+    api_key: API_KEY,
+    last4: last4.trim(),
+  }
+
   const response = await fetch(
-    `${KRIPICARD_BASE_URL}/premium/Get_CardDetails?api_key=${API_KEY}&card_id=${cardId}`,
+    `${KRIPICARD_BASE_URL}/cards/carddetails`,
     {
-      method: "GET",
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify(payload),
     }
   )
 
@@ -401,29 +424,8 @@ export async function getCardDetails(cardId: string): Promise<CardDetailsRespons
     throw new Error(data.message || "Failed to get card details")
   }
 
-  // Map the nested response to our flat interface
-  if (data.data?.details) {
-    const d = data.data.details
-    
-    if (!d.number || !d.cvv || !d.expiryDate) {
-      console.error("[KripiCard] Card details missing critical fields:", { number: !!d.number, cvv: !!d.cvv, expiryDate: !!d.expiryDate })
-      throw new Error(`Card details incomplete for ${cardId}. Missing: ${!d.number ? 'number ' : ''}${!d.cvv ? 'cvv ' : ''}${!d.expiryDate ? 'expiry' : ''}`)
-    }
-
-    return {
-      success: true,
-      card_id: cardId,
-      card_number: d.number,
-      expiry_date: d.expiryDate,
-      cvv: d.cvv,
-      balance: parseFloat(d.cardBalance) || 0,
-      status: d.state === 1 ? "ACTIVE" : d.state === 2 ? "FROZEN" : "CANCELLED",
-      name_on_card: d.addressMv?.firstName || "",
-      message: data.message,
-    }
-  }
-
-  return data
+  // Return the response as-is
+  return data as CardDetailsResponse
 }
 
 // Freeze or unfreeze a card
@@ -652,4 +654,94 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
       message: error instanceof Error ? error.message : "Failed to fetch transactions",
     }
   }
+}
+
+/**
+ * Get card details using card_id (for premium/manual verification)
+ * Used after 4-hour window when user provides the card_id from KripiCard
+ */
+export async function getCardDetailsById(cardId: string): Promise<CardDetailsResponse> {
+  if (!API_KEY) {
+    throw new Error("KRIPICARD_API_KEY is not configured")
+  }
+
+  console.log("[KripiCard] Fetching card details by ID:", cardId)
+
+  // Premium endpoint uses GET with query params
+  const url = new URL(`${KRIPICARD_BASE_URL}/premium/Get_CardDetails`)
+  url.searchParams.append('api_key', API_KEY)
+  url.searchParams.append('card_id', cardId.trim())
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+
+  let data
+  try {
+    const contentType = response.headers.get("content-type")
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await response.text()
+      throw new Error(`Expected JSON response but got ${contentType}: ${text.substring(0, 100)}`)
+    }
+    data = await response.json()
+  } catch (parseError) {
+    console.error("[KripiCard] Failed to parse card details response:", parseError)
+    throw new Error(`Failed to get card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+  }
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to get card details")
+  }
+
+  return data as CardDetailsResponse
+}
+
+/**
+ * Fund premium card using card_id
+ * Used for new cards that were manually verified after 4-hour window
+ */
+export async function fundPremiumCard(cardId: string, amount: number): Promise<FundCardResponse> {
+  if (!API_KEY) {
+    throw new Error("KRIPICARD_API_KEY is not configured")
+  }
+
+  if (!cardId || cardId.trim().length === 0) {
+    throw new Error("card_id is required")
+  }
+
+  if (!amount || amount <= 0) {
+    throw new Error(`Invalid amount: ${amount}`)
+  }
+
+  const payload = {
+    api_key: API_KEY,
+    card_id: cardId.trim(),
+    amount: Math.round(amount * 100) / 100,
+  }
+
+  console.log("[KripiCard] Funding premium card:", cardId, "Amount:", amount)
+
+  const response = await fetch(`${KRIPICARD_BASE_URL}/premium/Fund_Card`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  let data
+  try {
+    data = await response.json()
+  } catch (parseError) {
+    throw new Error(`Failed to parse response: ${parseError}`)
+  }
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to fund card")
+  }
+
+  return data as FundCardResponse
 }

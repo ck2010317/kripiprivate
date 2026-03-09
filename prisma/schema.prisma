@@ -34,6 +34,11 @@ model User {
   payments      Payment[]
   apiKeys       ApiKey[]
   referralLogs  ReferralLog[]  // Logs of referral rewards earned
+  stores        Store[]        @relation("SellerStore") // Seller stores
+  
+  // Seller fields
+  isSeller      Boolean  @default(false)
+  sellerApprovedAt DateTime?
 }
 
 model ReferralLog {
@@ -193,6 +198,166 @@ enum TransactionType {
   UNFREEZE  // Card was unfrozen
   REFUND    // Transaction refund
   BALANCE_SYNC  // Balance synced from KripiCard
+}
+
+// ============================================
+// PrivatePay API Product Models
+// ============================================
+
+// ============================================
+// Marketplace Models
+// ============================================
+
+model Store {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String    @default("")
+  logo          String?
+  banner        String?
+  
+  // Owner
+  sellerId      String
+  seller        User      @relation("SellerStore", fields: [sellerId], references: [id], onDelete: Cascade)
+  
+  // Store settings
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  solWallet     String    // Seller's SOL wallet for payouts
+  
+  // Stats
+  totalSales    Float     @default(0)
+  totalOrders   Int       @default(0)
+  rating        Float     @default(0)
+  
+  // Relations
+  products      Product[]
+  orders        Order[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([sellerId])
+  @@index([slug])
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  name          String
+  description   String    @default("")
+  price         Float
+  comparePrice  Float?    // Original price for sale display
+  
+  // Categorization
+  category      String    @default("general")
+  tags          String    @default("") // Comma-separated
+  
+  // Images (comma-separated URLs)
+  images        String    @default("")
+  
+  // Inventory
+  stock         Int       @default(0)
+  trackStock    Boolean   @default(true)
+  
+  // Variants (JSON string: [{name, options: []}])
+  variants      String?
+  
+  // Status
+  isActive      Boolean   @default(true)
+  isFeatured    Boolean   @default(false)
+  
+  // Store
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  orderItems    OrderItem[]
+  reviews       Review[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([category])
+  @@index([isActive])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique @default(cuid())
+  
+  // Buyer info
+  buyerEmail      String
+  buyerName       String
+  shippingAddress String
+  
+  // Payment
+  totalUsd        Float
+  totalSol        Float
+  solPrice        Float       // SOL/USD at time of order
+  txSignature     String?     // SOL transaction hash
+  paymentStatus   String      @default("PENDING") // PENDING, PAID, REFUNDED
+  
+  // Fulfillment
+  status          String      @default("PENDING") // PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED
+  trackingNumber  String?
+  trackingUrl     String?
+  
+  // Store
+  storeId         String
+  store           Store       @relation(fields: [storeId], references: [id])
+  
+  // Items
+  items           OrderItem[]
+  
+  // Optional user relation
+  userId          String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([storeId])
+  @@index([buyerEmail])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  
+  quantity    Int
+  priceAtTime Float   // Price when ordered
+  
+  // Selected variant options (JSON)
+  variantOptions String?
+  
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  // Reviewer
+  reviewerName  String
+  reviewerEmail String
+  
+  rating      Int      // 1-5
+  comment     String   @default("")
+  
+  isVerified  Boolean  @default(false) // Verified purchase
+  
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
 }
 
 // ============================================

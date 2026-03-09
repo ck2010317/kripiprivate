@@ -28,5 +28,9 @@ bun-debug.log
 *.tsbuildinfo
 next-env.d.ts
 
+# ios build artifacts
+ios/App/build/
+ios/App/Pods/
+
 /lib/generated/prisma
 .agent-hackathon.json

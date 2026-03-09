@@ -1,0 +1,195 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { SellerOnboarding } from '@/app/components/seller-onboarding'
+import { SellerDashboard } from '@/app/components/seller-management'
+import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+
+interface Store {
+  id: string
+  name: string
+  slug: string
+  description: string
+  image: string
+  totalSales: number
+  totalOrders: number
+  rating: number
+  productCount: number
+}
+
+export default function SellerPage() {
+  const router = useRouter()
+  const [store, setStore] = useState<Store | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const fetchUserStore = async () => {
+      try {
+        console.log('Fetching user store...')
+        const response = await fetch('/api/marketplace/stores/my-store', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store',
+        })
+        
+        console.log('Response status:', response.status)
+
+        if (response.status === 401) {
+          console.log('User not authenticated')
+          // Not logged in
+          setStore(null)
+          setLoading(false)
+          return
+        }
+
+        if (response.status === 404) {
+          console.log('No store found for user')
+          // No store yet, show onboarding
+          setStore(null)
+          setLoading(false)
+          return
+        }
+
+        if (!response.ok) {
+          console.error('API response not OK:', response.status, response.statusText)
+          throw new Error(`API error: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('Store data:', data)
+        setStore(data.store)
+      } catch (err) {
+        console.error('Fetch error:', err)
+        // If there's an error, show onboarding (not logged in or no store)
+        setStore(null)
+        setError(err instanceof Error ? err.message : 'Something went wrong')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserStore()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Loading...</h1>
+          <p className="text-gray-600 mt-2">If you see this, please log in first or create an account</p>
+          <a href="/" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Go Home
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  // User has a store - show management dashboard
+  if (store) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {store.name} - Seller Dashboard
+                </h1>
+                <p className="text-gray-600 mt-1">{store.description}</p>
+              </div>
+              <Link href={`/store/${store.slug}`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  View Store
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Management Dashboard */}
+          <SellerDashboard storeId={store.id} />
+        </div>
+      </div>
+    )
+  }
+
+  // No store yet - show onboarding
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="inline-block mb-6">
+            <div className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+              PrivateShop
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Become a Seller
+          </h1>
+          <p className="text-xl text-gray-300">
+            Launch your store and start selling to thousands of customers with Solana payments
+          </p>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+            <div className="text-3xl mb-3">🏪</div>
+            <h3 className="text-lg font-semibold text-white mb-2">Create Your Store</h3>
+            <p className="text-gray-400 text-sm">
+              Set up a professional store in minutes with no technical knowledge required
+            </p>
+          </div>
+
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+            <div className="text-3xl mb-3">📦</div>
+            <h3 className="text-lg font-semibold text-white mb-2">List Products</h3>
+            <p className="text-gray-400 text-sm">
+              Add unlimited products with images, descriptions, and pricing
+            </p>
+          </div>
+
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+            <div className="text-3xl mb-3">💰</div>
+            <h3 className="text-lg font-semibold text-white mb-2">Get Paid in SOL</h3>
+            <p className="text-gray-400 text-sm">
+              Receive payments instantly in Solana with zero KYC requirements
+            </p>
+          </div>
+        </div>
+
+        {/* Onboarding Form */}
+        <SellerOnboarding />
+
+        {/* Footer Info */}
+        <div className="mt-12 bg-slate-800 border border-slate-700 rounded-lg p-8">
+          <h3 className="text-lg font-semibold text-white mb-4">Why Sell on PrivateShop?</h3>
+          <div className="grid md:grid-cols-2 gap-4 text-gray-300 text-sm">
+            <div>✓ No KYC/Account verification required</div>
+            <div>✓ Direct Solana payments to your wallet</div>
+            <div>✓ No transaction fees - keep 100% of your sales</div>
+            <div>✓ Instant payouts, no waiting periods</div>
+            <div>✓ Full control over your store and products</div>
+            <div>✓ Built-in review and rating system</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

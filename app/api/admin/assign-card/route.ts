@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getCardDetails } from "@/lib/kripicard-client"
+import { getCardDetailsById } from "@/lib/kripicard-client"
 
 // POST /api/admin/assign-card
 // Admin assigns a kripiCardId to a PENDING card after manually creating it on KripiCard dashboard
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     console.log(`[Admin Assign] Fetching details for kripiCardId: ${trimmedKripiId}`)
     let cardDetails
     try {
-      cardDetails = await getCardDetails(trimmedKripiId)
+      cardDetails = await getCardDetailsById(trimmedKripiId)
     } catch (fetchError) {
       console.error(`[Admin Assign] Failed to fetch card details:`, fetchError)
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError)

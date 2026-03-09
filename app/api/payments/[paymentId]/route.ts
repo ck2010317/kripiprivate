@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { verifyPayment } from "@/lib/solana-payment"
-import { fundCard } from "@/lib/kripicard-client"
+import { fundPremiumCard } from "@/lib/kripicard-client"
 import { checkTokenHolding } from "@/lib/token-gate"
 
 // Verify payment and process card
@@ -375,10 +375,7 @@ export async function POST(
       
       try {
         console.log(`[Fund Card] Calling fundCard API...`)
-        const fundResponse = await fundCard({
-          card_id: card.kripiCardId,
-          amount: fundAmount,
-        })
+        const fundResponse = await fundPremiumCard(card.kripiCardId, fundAmount)
 
         console.log(`[Fund Card] ✅ Fund successful:`, {
           newBalance: fundResponse.new_balance,

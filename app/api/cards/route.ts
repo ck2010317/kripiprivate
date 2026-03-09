@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { getCardDetails } from "@/lib/kripicard-client"
+import { getCardDetailsById } from "@/lib/kripicard-client"
 
 export async function POST(request: NextRequest) {
   try {
@@ -121,7 +121,7 @@ export async function GET() {
         }
 
         try {
-          const kripiDetails = await getCardDetails(card.kripiCardId)
+          const kripiDetails = await getCardDetailsById(card.kripiCardId)
           
           const updates: Record<string, any> = {}
           

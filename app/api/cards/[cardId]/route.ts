@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { getCardDetails, fundCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
+import { getCardDetailsById, fundPremiumCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
 
 // Get single card details
 export async function GET(
@@ -37,7 +37,7 @@ export async function GET(
 
     // Fetch latest details from KripiCard API and sync to DB
     try {
-      const kripiDetails = await getCardDetails(card.kripiCardId)
+      const kripiDetails = await getCardDetailsById(card.kripiCardId)
       
       // Build update object for any changed fields
       const updates: Record<string, any> = {}
@@ -145,10 +145,7 @@ export async function POST(
         )
       }
 
-      const fundResponse = await fundCard({
-        card_id: card.kripiCardId,
-        amount,
-      })
+      const fundResponse = await fundPremiumCard(card.kripiCardId, amount)
 
       // Update local balance
       await prisma.card.update({
