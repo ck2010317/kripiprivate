@@ -665,12 +665,18 @@ export async function getCardDetailsById(cardId: string): Promise<CardDetailsRes
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
-  console.log("[KripiCard] Fetching card details by ID:", cardId)
+  const trimmedId = cardId.trim()
+  console.log("[KripiCard] Fetching card details by ID:", trimmedId)
+  console.log("[KripiCard] Card ID format check - Length:", trimmedId.length, "Format:", trimmedId.match(/^[a-zA-Z0-9]+$/) ? "alphanumeric ✓" : "INVALID")
+  
+  if (trimmedId.length < 10) {
+    throw new Error(`Card ID appears invalid (too short: ${trimmedId.length} chars). Expected format like 'C260220012745332523' or 'VC123456789'. Got: ${trimmedId}`)
+  }
 
   // Premium endpoint uses GET with query params
   const url = new URL(`${KRIPICARD_BASE_URL}/premium/Get_CardDetails`)
   url.searchParams.append('api_key', API_KEY)
-  url.searchParams.append('card_id', cardId.trim())
+  url.searchParams.append('card_id', trimmedId)
 
   const response = await fetch(url.toString(), {
     method: "GET",
