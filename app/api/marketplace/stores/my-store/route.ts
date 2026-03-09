@@ -2,10 +2,15 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 
+export const maxDuration = 10
+
 // Get the current user's store (private endpoint)
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await Promise.race([
+      getCurrentUser(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ])
 
     if (!user) {
       // Not authenticated - return 401 to indicate user needs to login
