@@ -720,7 +720,15 @@ export default function PrivateShop() {
               <p className="text-[10px] text-muted-foreground -mt-0.5">by PrivatePay</p>
             </div>
           </div>
-          <CartButton count={cartCount} onClick={() => setShowCart(true)} />
+          <div className="flex items-center gap-3">
+            <a
+              href="/shop/seller"
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors"
+            >
+              Sell Here
+            </a>
+            <CartButton count={cartCount} onClick={() => setShowCart(true)} />
+          </div>
         </div>
       </header>
 
@@ -863,6 +871,127 @@ export default function PrivateShop() {
             <p className="text-sm text-muted-foreground">Try adjusting your filters</p>
           </div>
         )}
+      </section>
+
+      {/* Marketplace Section - Vendor Stores */}
+      <section className="bg-gradient-to-br from-background via-primary/5 to-background py-24">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-16">
+            <p className="text-xs font-semibold text-primary tracking-[0.3em] mb-4">MULTI-VENDOR MARKETPLACE</p>
+            <h3 className="text-3xl md:text-5xl font-bold mb-4">
+              Sell Your Products on PrivateShop
+            </h3>
+            <p className="text-muted-foreground max-w-2xl mx-auto mb-8 text-lg">
+              Create your own store, list unlimited products, and start selling to thousands of customers. 
+              Get paid in SOL instantly. No KYC. No fees. 100% yours.
+            </p>
+            <a
+              href="/shop/seller"
+              className="inline-block px-8 py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground font-bold hover:shadow-xl hover:shadow-primary/30 transition-all text-lg"
+            >
+              Create Your Store Now
+            </a>
+          </div>
+
+          {/* Features Grid */}
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <ShoppingBag className="w-6 h-6 text-primary" />
+              </div>
+              <h4 className="text-xl font-bold mb-2">Create Your Store</h4>
+              <p className="text-muted-foreground">
+                Set up a professional store in minutes. No coding skills needed. Customize your branding and start selling.
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Package className="w-6 h-6 text-primary" />
+              </div>
+              <h4 className="text-xl font-bold mb-2">List Products</h4>
+              <p className="text-muted-foreground">
+                Add unlimited products with images, descriptions, prices, and inventory management. Full control over your catalog.
+              </p>
+            </div>
+
+            <div className="bg-card border border-border rounded-2xl p-8 hover:border-primary/50 transition-all">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <ShoppingBag className="w-6 h-6 text-primary" />
+              </div>
+              <h4 className="text-xl font-bold mb-2">Get Paid in SOL</h4>
+              <p className="text-muted-foreground">
+                Receive payments instantly in Solana. No waiting, no middlemen. Keep 100% of your sales. Zero platform fees.
+              </p>
+            </div>
+          </div>
+
+          {/* Why Sell Section */}
+          <div className="bg-card border border-border rounded-2xl p-12 text-center">
+            <h4 className="text-2xl font-bold mb-8">Why Sell on PrivateShop?</h4>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> No KYC or Account Verification
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Start selling immediately. No bureaucracy. Just you and your products.
+                </p>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> Direct Solana Payments
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Payments go straight to your wallet. Instant settlement.
+                </p>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> Zero Platform Fees
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Keep 100% of your sales. No transaction fees or hidden charges.
+                </p>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> Full Store Control
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Your store, your rules. Manage pricing, inventory, and customer reviews.
+                </p>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> Privacy First
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Built on privacy principles. No tracking or data selling.
+                </p>
+              </div>
+              <div className="text-left">
+                <p className="font-semibold mb-2 flex items-center gap-2">
+                  <span className="text-primary">✓</span> Instant Payouts
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Get paid immediately after orders are confirmed on-chain.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="text-center mt-12">
+            <p className="text-muted-foreground mb-6">Ready to start selling?</p>
+            <a
+              href="/shop/seller"
+              className="inline-block px-8 py-4 rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground font-bold hover:shadow-xl hover:shadow-primary/30 transition-all text-lg"
+            >
+              Launch Your Store Today
+            </a>
+          </div>
+        </div>
       </section>
 
       {/* Cart Slide-over */}

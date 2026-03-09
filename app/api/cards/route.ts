@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { getCardDetailsById } from "@/lib/kripicard-client"
 
+export const maxDuration = 15
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -121,7 +123,10 @@ export async function GET() {
         }
 
         try {
-          const kripiDetails = await getCardDetailsById(card.kripiCardId)
+          const kripiDetails = await Promise.race([
+            getCardDetailsById(card.kripiCardId),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 4000))
+          ])
           
           const updates: Record<string, any> = {}
           

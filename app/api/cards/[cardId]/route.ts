@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { getCardDetailsById, fundPremiumCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
 
+export const maxDuration = 15
+
 // Get single card details
 export async function GET(
   request: NextRequest,
@@ -37,7 +39,10 @@ export async function GET(
 
     // Fetch latest details from KripiCard API and sync to DB
     try {
-      const kripiDetails = await getCardDetailsById(card.kripiCardId)
+      const kripiDetails = await Promise.race([
+        getCardDetailsById(card.kripiCardId),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 5000))
+      ])
       
       // Build update object for any changed fields
       const updates: Record<string, any> = {}
