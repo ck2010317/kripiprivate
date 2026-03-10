@@ -581,7 +581,7 @@ export async function getCardTransactions(cardId: string): Promise<CardTransacti
 
     if (rawTransactions.length === 0) {
       console.log("[KripiCard] No transactions found. Response keys:", Object.keys(data))
-      if (nestedData) console.log("[KripiCard] data.* keys:", Object.keys(nestedData))
+      if (data.card) console.log("[KripiCard] data.card keys:", Object.keys(data.card as object))
       return {
         success: true,
         transactions: [],

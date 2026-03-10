@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getCardDetails } from "@/lib/kripicard-client"
 
 export const maxDuration = 15
+export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
   try {
@@ -118,6 +119,7 @@ export async function GET() {
           
           const updates: Record<string, any> = {}
           
+          console.log(`[Cards] Balance sync for card ${card.id}: KripiCard=${kripiDetails.balance} (${typeof kripiDetails.balance}), DB=${card.balance} (${typeof card.balance}), match=${kripiDetails.balance === card.balance}`)
           if (kripiDetails.balance !== card.balance) {
             updates.balance = kripiDetails.balance
           }

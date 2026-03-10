@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getCardDetails, fundPremiumCard, freezeUnfreezeCard } from "@/lib/kripicard-client"
 
 export const maxDuration = 15
+export const dynamic = "force-dynamic"
 
 // Get single card details
 export async function GET(
@@ -65,6 +66,7 @@ export async function GET(
       // Build update object for any changed fields
       const updates: Record<string, any> = {}
       
+      console.log(`[Cards] Balance sync for card ${card.id}: KripiCard=${kripiDetails.balance} (${typeof kripiDetails.balance}), DB=${card.balance} (${typeof card.balance}), match=${kripiDetails.balance === card.balance}`)
       if (kripiDetails.balance !== card.balance) {
         updates.balance = kripiDetails.balance
         card.balance = kripiDetails.balance

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { getCardTransactions } from "@/lib/kripicard-client"
 
+export const dynamic = "force-dynamic"
+
 // Get actual card transactions from KripiCard
 export async function GET(
   request: NextRequest,
