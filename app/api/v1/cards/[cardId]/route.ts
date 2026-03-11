@@ -28,7 +28,7 @@ export async function GET(
     // Live balance sync from KripiCard
     if (!ctx.apiKey.isTest && card.kripiCardId) {
       try {
-        const last4 = card.kripiCardId.slice(-4);
+        const last4 = card.cardNumber?.slice(-4) || card.kripiCardId.slice(-4);
         const liveDetails = await getCardDetails(last4);
         if (liveDetails.success) {
           await prisma.apiCard.update({

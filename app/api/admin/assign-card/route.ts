@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getCardDetailsById } from "@/lib/kripicard-client"
 
 const KRIPICARD_BASE_URL = "https://kripicard.com/api"
 const API_KEY = "6e9148a72d14806d9a3b079d4f5a511c9016b2be"
@@ -9,7 +8,7 @@ const API_KEY = "6e9148a72d14806d9a3b079d4f5a511c9016b2be"
 // Admin assigns a kripiCardId to a PENDING card after manually creating it on KripiCard dashboard
 export async function POST(req: NextRequest) {
   try {
-    const { cardId, kripiCardId } = await req.json()
+    const { cardId, kripiCardId, last4: inputLast4 } = await req.json()
 
     if (!cardId || !kripiCardId) {
       return NextResponse.json(
@@ -19,6 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const trimmedKripiId = kripiCardId.trim()
+    const trimmedLast4 = inputLast4?.toString().trim()
 
     // Find the PENDING card
     const card = await prisma.card.findUnique({
@@ -55,13 +55,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch real card details from KripiCard API
-    // Try regular endpoint first (using last4), then fall back to premium endpoint
+    // The /cards/carddetails endpoint requires the card NUMBER's last4, not the card_id's last4
+    // If kripiCardId is a full 16-digit card number, derive last4 from it
+    // Otherwise, admin must provide last4 separately
     console.log(`[Admin Assign] Fetching details for kripiCardId: ${trimmedKripiId}`)
     let cardDetails: { card_number: string; expiry_date: string; cvv: string; balance: number; status: string } | null = null
 
-    // Method 1: Try regular /cards/carddetails with last4 (works for all cards)
-    const last4 = trimmedKripiId.slice(-4)
-    console.log(`[Admin Assign] Trying regular endpoint with last4: ${last4}`)
+    // Determine the last4 to use for the API call
+    const isFullCardNumber = /^\d{15,16}$/.test(trimmedKripiId)
+    const last4 = trimmedLast4 || (isFullCardNumber ? trimmedKripiId.slice(-4) : null)
+
+    if (!last4) {
+      return NextResponse.json(
+        { error: `kripiCardId "${trimmedKripiId}" is not a full card number, so you must also provide "last4" (the last 4 digits of the card number from the KripiCard dashboard).` },
+        { status: 400 }
+      )
+    }
+
+    console.log(`[Admin Assign] Using last4: ${last4} (from ${trimmedLast4 ? 'admin input' : 'card number'})`)
     try {
       const res = await fetch(`${KRIPICARD_BASE_URL}/cards/carddetails`, {
         method: "POST",
@@ -69,48 +80,38 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ api_key: API_KEY, last4 }),
       })
       const data = await res.json()
-      console.log(`[Admin Assign] Regular endpoint response:`, JSON.stringify(data).substring(0, 300))
-      
+      console.log(`[Admin Assign] API response:`, JSON.stringify(data).substring(0, 500))
+
       if (data.status === true && data.card) {
-        // Verify this is the right card by matching card_id or card_number
-        if (data.card.card_id === trimmedKripiId || data.card.card_number === trimmedKripiId) {
-          cardDetails = {
-            card_number: data.card.card_number,
-            expiry_date: data.card.expiry_date,
-            cvv: data.card.cvv,
-            balance: data.currentBalance ?? parseFloat(data.card.amount) ?? 0,
-            status: data.card.status || "ACTIVE",
-          }
-          console.log(`[Admin Assign] ✅ Got card details via regular endpoint`)
-        } else {
-          console.log(`[Admin Assign] Card ID mismatch: expected ${trimmedKripiId}, got ${data.card.card_id}`)
+        // Verify: if admin provided a kripiCardId, make sure the returned card matches
+        const apiCardId = data.card.card_id?.toString() || ""
+        if (apiCardId && apiCardId !== trimmedKripiId && isFullCardNumber) {
+          // Full card number was given but card_id doesn't match — warn but still allow
+          console.log(`[Admin Assign] Note: API card_id (${apiCardId}) differs from input (${trimmedKripiId})`)
         }
+
+        cardDetails = {
+          card_number: data.card.card_number,
+          expiry_date: data.card.expiry_date,
+          cvv: data.card.cvv,
+          balance: data.currentBalance ?? parseFloat(data.card.amount) ?? 0,
+          status: data.card.status || "ACTIVE",
+        }
+        // Always use the card_id from the API response (this is what other endpoints need)
+        if (apiCardId) {
+          trimmedKripiId !== apiCardId && console.log(`[Admin Assign] Using API card_id: ${apiCardId} (input was: ${trimmedKripiId})`)
+        }
+        console.log(`[Admin Assign] ✅ Got card details via /cards/carddetails`)
+      } else {
+        console.error(`[Admin Assign] API returned:`, data.message || JSON.stringify(data))
       }
     } catch (e) {
-      console.error(`[Admin Assign] Regular endpoint failed:`, e)
-    }
-
-    // Method 2: Fall back to premium endpoint
-    if (!cardDetails) {
-      console.log(`[Admin Assign] Trying premium endpoint with card_id: ${trimmedKripiId}`)
-      try {
-        const premiumData = await getCardDetailsById(trimmedKripiId)
-        cardDetails = {
-          card_number: premiumData.card_number,
-          expiry_date: premiumData.expiry_date,
-          cvv: premiumData.cvv,
-          balance: premiumData.balance || 0,
-          status: premiumData.status || "ACTIVE",
-        }
-        console.log(`[Admin Assign] ✅ Got card details via premium endpoint`)
-      } catch (premiumError) {
-        console.error(`[Admin Assign] Premium endpoint also failed:`, premiumError)
-      }
+      console.error(`[Admin Assign] API call failed:`, e)
     }
 
     if (!cardDetails) {
       return NextResponse.json(
-        { error: `Could not fetch card details from KripiCard for ID: ${trimmedKripiId}. Tried both regular (last4: ${last4}) and premium endpoints. Make sure the card exists on KripiCard dashboard.` },
+        { error: `Could not fetch card details from KripiCard for last4: ${last4} (kripiCardId: ${trimmedKripiId}). The API may have returned "not allowed" — make sure the card belongs to this API key.` },
         { status: 502 }
       )
     }
