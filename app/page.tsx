@@ -1336,6 +1336,7 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [pendingCards, setPendingCards] = useState<PendingCardInfo[]>([])
   const [kripiCardInputs, setKripiCardInputs] = useState<Record<string, string>>({})
+  const [last4Inputs, setLast4Inputs] = useState<Record<string, string>>({})
   const [assigningCardId, setAssigningCardId] = useState<string | null>(null)
   const [assignMessage, setAssignMessage] = useState<{ cardId: string; type: "success" | "error"; text: string } | null>(null)
   const [pendingPayments, setPendingPayments] = useState<Array<{
@@ -1419,13 +1420,19 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
       setAssignMessage({ cardId, type: "error", text: "Please enter a KripiCard ID" })
       return
     }
+    const last4 = last4Inputs[cardId]?.trim()
+    const isFullCardNumber = /^\d{15,16}$/.test(kripiCardId)
+    if (!isFullCardNumber && !last4) {
+      setAssignMessage({ cardId, type: "error", text: "Enter the card's last 4 digits (from the card number, not the ID)" })
+      return
+    }
     setAssigningCardId(cardId)
     setAssignMessage(null)
     try {
       const res = await fetch("/api/admin/assign-card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId, kripiCardId }),
+        body: JSON.stringify({ cardId, kripiCardId, ...(last4 ? { last4 } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -1731,13 +1738,21 @@ function AdminLiveDashboard({ onBack, userEmail }: { onBack: () => void; userEma
                                 <p>🕐 {new Date(card.createdAt).toLocaleString()}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 w-full md:w-auto">
+                            <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
                               <input
-                                placeholder="KripiCard ID (e.g. C260...)"
+                                placeholder="KripiCard ID (e.g. 25284)"
                                 value={kripiCardInputs[card.id] || ""}
                                 onChange={(e) => setKripiCardInputs(prev => ({ ...prev, [card.id]: e.target.value }))}
-                                className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none min-w-[200px]"
+                                className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none min-w-[150px]"
                                 disabled={assigningCardId === card.id}
+                              />
+                              <input
+                                placeholder="Card last4 (e.g. 1304)"
+                                value={last4Inputs[card.id] || ""}
+                                onChange={(e) => setLast4Inputs(prev => ({ ...prev, [card.id]: e.target.value }))}
+                                className="text-sm px-3 py-2 rounded-lg bg-background border border-border/50 focus:border-primary outline-none w-[140px]"
+                                disabled={assigningCardId === card.id}
+                                maxLength={4}
                               />
                               <Button
                                 onClick={() => assignCard(card.id)}
