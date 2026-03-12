@@ -526,36 +526,72 @@ export async function getCardTransactions(cardId: string, cardNumber?: string): 
   }
 
   // cardId is the kripiCardId which may be a full card number (16 digits) or a short ID (e.g. "25284")
-  // If kripiCardId is short, we need cardNumber to extract the correct last4
+  const isShortId = cardId.length < 13
   const last4 = cardNumber ? cardNumber.slice(-4) : cardId.slice(-4)
-  console.log("[KripiCard] Fetching transactions for card last4:", last4)
 
   try {
-    const response = await fetch(
-      `${KRIPICARD_BASE_URL}/cards/carddetails`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ api_key: API_KEY, last4 }),
-      }
-    )
-
-    console.log("[KripiCard] Get card details response status:", response.status)
-
     let data: Record<string, unknown>
-    try {
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text()
-        console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
-        throw new Error(`Expected JSON response but got ${contentType}`)
+
+    if (isShortId) {
+      // Short kripiCardId means card was created via premium endpoint — use premium API
+      console.log("[KripiCard] Fetching transactions via premium endpoint for card_id:", cardId)
+      const url = new URL(`${KRIPICARD_BASE_URL}/premium/Get_CardDetails`)
+      url.searchParams.append('api_key', API_KEY)
+      url.searchParams.append('card_id', cardId.trim())
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      })
+
+      console.log("[KripiCard] Premium endpoint response status:", response.status)
+
+      try {
+        const contentType = response.headers.get("content-type")
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await response.text()
+          console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
+          throw new Error(`Expected JSON response but got ${contentType}`)
+        }
+        data = await response.json()
+      } catch (parseError) {
+        console.error("[KripiCard] Failed to parse response:", parseError)
+        throw new Error(`Failed to parse card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
       }
-      data = await response.json()
-    } catch (parseError) {
-      console.error("[KripiCard] Failed to parse response:", parseError)
-      throw new Error(`Failed to parse card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+
+      if (!response.ok || (!data.success && !data.status)) {
+        throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
+      }
+    } else {
+      // Full card number — use regular last4 endpoint
+      console.log("[KripiCard] Fetching transactions via regular endpoint for last4:", last4)
+      const response = await fetch(
+        `${KRIPICARD_BASE_URL}/cards/carddetails`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_key: API_KEY, last4 }),
+        }
+      )
+
+      console.log("[KripiCard] Get card details response status:", response.status)
+
+      try {
+        const contentType = response.headers.get("content-type")
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await response.text()
+          console.error("[KripiCard] Non-JSON response:", text.substring(0, 500))
+          throw new Error(`Expected JSON response but got ${contentType}`)
+        }
+        data = await response.json()
+      } catch (parseError) {
+        console.error("[KripiCard] Failed to parse response:", parseError)
+        throw new Error(`Failed to parse card details: ${parseError instanceof Error ? parseError.message : "Invalid response"}`)
+      }
+
+      if (!response.ok) {
+        throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
+      }
     }
 
     // Log the FULL response so we can see all available fields
@@ -564,15 +600,10 @@ export async function getCardTransactions(cardId: string, cardNumber?: string): 
     console.log("[KripiCard] Full response:", JSON.stringify(data, null, 2))
     console.log("[KripiCard] ===== END Response =====")
 
-    if (!response.ok) {
-      throw new Error((data.message as string) || `Failed to get card details (HTTP ${response.status})`)
-    }
-
-    // Regular /cards/carddetails returns: { status: true, card: {...}, transactions: [...], currentBalance: N }
+    // Look for transactions in the response
     let rawTransactions: Record<string, unknown>[] = []
     let foundField = ""
 
-    // Check for transactions array directly in response
     if (Array.isArray(data.transactions)) {
       rawTransactions = data.transactions as Record<string, unknown>[]
       foundField = "transactions"
@@ -591,7 +622,7 @@ export async function getCardTransactions(cardId: string, cardNumber?: string): 
 
     console.log(`[KripiCard] Raw transactions from "${foundField}":`, JSON.stringify(rawTransactions.slice(0, 2), null, 2))
 
-    // Normalize transaction data from KripiCard regular endpoint format
+    // Normalize transaction data from KripiCard format
     const normalizedTransactions: CardTransaction[] = rawTransactions.map((tx, index) => {
       // Parse amount - KripiCard uses auth_amt, trade_amt, settle_amt
       let amount = 0
