@@ -45,7 +45,7 @@ export async function GET(
     }
 
     try {
-      const result = await getCardTransactions(card.kripiCardId);
+      const result = await getCardTransactions(card.kripiCardId, card.cardNumber);
       return NextResponse.json({
         data: result.transactions.map((tx) => ({
           id: tx.transaction_id,

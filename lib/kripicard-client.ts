@@ -520,14 +520,14 @@ export async function freezeUnfreezeCard(request: FreezeUnfreezeRequest): Promis
 
 // Get card transactions from KripiCard
 // Uses regular /cards/carddetails endpoint which includes transaction data
-export async function getCardTransactions(cardId: string): Promise<CardTransactionsResponse> {
+export async function getCardTransactions(cardId: string, cardNumber?: string): Promise<CardTransactionsResponse> {
   if (!API_KEY) {
     throw new Error("KRIPICARD_API_KEY is not configured")
   }
 
-  // cardId here is the kripiCardId (full card number like 4288130026993758)
-  // Extract last4 to use with regular endpoint
-  const last4 = cardId.slice(-4)
+  // cardId is the kripiCardId which may be a full card number (16 digits) or a short ID (e.g. "25284")
+  // If kripiCardId is short, we need cardNumber to extract the correct last4
+  const last4 = cardNumber ? cardNumber.slice(-4) : cardId.slice(-4)
   console.log("[KripiCard] Fetching transactions for card last4:", last4)
 
   try {

@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // Fetch transactions from KripiCard API
-    const result = await getCardTransactions(card.kripiCardId)
+    const result = await getCardTransactions(card.kripiCardId, card.cardNumber)
 
     return NextResponse.json({
       success: true,
