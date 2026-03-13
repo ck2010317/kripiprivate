@@ -105,9 +105,9 @@ export async function POST(req: NextRequest) {
         email: email.toLowerCase().trim(),
       });
 
-      // Deduct from developer's wallet balance
+      // Deduct from developer's wallet balance atomically
       const newBalance = ctx.apiKey.walletBalance - totalCost;
-      
+
       // Save card + update wallet + log transactions in one go
       const [apiCard] = await prisma.$transaction([
         prisma.apiCard.create({
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         prisma.apiKey.update({
           where: { id: ctx.apiKey.id },
           data: {
-            walletBalance: newBalance,
+            walletBalance: { decrement: totalCost },
             totalCharged: { increment: totalCost },
             totalCards: { increment: 1 },
             totalVolume: { increment: amount },

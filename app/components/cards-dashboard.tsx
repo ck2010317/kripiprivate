@@ -46,7 +46,7 @@ export function CardsDashboard({ onCreateNew }: CardsDashboardProps) {
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/cards")
+      const response = await fetch("/api/cards", { cache: "no-store" })
       if (!response.ok) {
         throw new Error("Failed to fetch cards")
       }

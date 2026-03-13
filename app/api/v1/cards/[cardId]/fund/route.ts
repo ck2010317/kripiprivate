@@ -101,9 +101,7 @@ export async function POST(
     try {
       const result = await fundPremiumCard(card.kripiCardId, amount);
 
-      // Deduct from wallet
-      const newWalletBalance = ctx.apiKey.walletBalance - totalCost;
-
+      // Deduct from wallet atomically
       await prisma.$transaction([
         prisma.apiCard.update({
           where: { id: card.id },
@@ -112,7 +110,7 @@ export async function POST(
         prisma.apiKey.update({
           where: { id: ctx.apiKey.id },
           data: {
-            walletBalance: newWalletBalance,
+            walletBalance: { decrement: totalCost },
             totalCharged: { increment: totalCost },
             totalVolume: { increment: amount },
           },
@@ -122,7 +120,7 @@ export async function POST(
             apiKeyId: ctx.apiKey.id,
             type: "CARD_FUND",
             amount: totalCost,
-            balanceAfter: newWalletBalance,
+            balanceAfter: ctx.apiKey.walletBalance - totalCost,
             description: `Fund card $${amount} + fee $${(fee + markup).toFixed(2)}`,
             reference: card.kripiCardId,
           },

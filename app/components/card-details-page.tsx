@@ -14,6 +14,7 @@ import {
   Play,
   ArrowLeft,
   Loader2,
+  RefreshCw,
 } from "lucide-react"
 import { useAuth } from "@/app/context/auth-context"
 import { TopupModal } from "@/app/components/topup-modal"
@@ -43,11 +44,32 @@ export function CardDetailsPage({
   const [showCVV, setShowCVV] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
+  const [cardBalance, setCardBalance] = useState(card.balance)
   const [cardStatus, setCardStatus] = useState<"ACTIVE" | "FROZEN" | "CANCELLED" | "PENDING">(
     card.status
   )
   const [showTopupModal, setShowTopupModal] = useState(false)
+
+  const refreshBalance = async () => {
+    setRefreshing(true)
+    setError("")
+    try {
+      const response = await fetch(`/api/cards/${card.id}/refresh-balance`, {
+        method: "POST",
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to refresh balance")
+      }
+      setCardBalance(data.new_balance)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refresh balance")
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text)
@@ -140,7 +162,7 @@ export function CardDetailsPage({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground font-semibold">PREPAID BALANCE</p>
-                  <p className="text-sm font-bold text-primary mt-1">${card.balance.toFixed(2)}</p>
+                  <p className="text-sm font-bold text-primary mt-1">${cardBalance.toFixed(2)}</p>
                 </div>
               </div>
             </div>
@@ -212,7 +234,7 @@ export function CardDetailsPage({
                         BALANCE
                       </p>
                       <p className="font-bold text-2xl text-white mt-1">
-                        ${card.balance.toFixed(2)}
+                        ${cardBalance.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -338,6 +360,26 @@ export function CardDetailsPage({
                   <p className="text-sm font-medium text-red-500">This card has been cancelled and can no longer be used.</p>
                 </div>
               )}
+
+              {/* Refresh Balance Button */}
+              <Button
+                onClick={refreshBalance}
+                disabled={refreshing || cardStatus === "CANCELLED"}
+                variant="outline"
+                className="w-full py-6"
+              >
+                {refreshing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Syncing Balance...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-5 h-5 mr-2" />
+                    Refresh Balance
+                  </>
+                )}
+              </Button>
 
               {/* Topup Button */}
               <Button

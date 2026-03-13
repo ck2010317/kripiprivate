@@ -114,7 +114,7 @@ export async function GET() {
           const last4 = card.cardNumber.slice(-4)
           const kripiDetails = await Promise.race([
             getCardDetails(last4),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 4000))
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("KripiCard sync timeout")), 8000))
           ])
           
           const updates: Record<string, any> = {}
